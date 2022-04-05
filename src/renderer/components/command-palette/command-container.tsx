@@ -14,6 +14,7 @@ import type { CommandOverlay } from "./command-overlay.injectable";
 import commandOverlayInjectable from "./command-overlay.injectable";
 import type { ipcRendererOn } from "../../../common/ipc";
 import { broadcastMessage } from "../../../common/ipc";
+import type { CatalogEntityRegistry } from "../../api/catalog/entity/registry";
 import { withInjectables } from "@ogre-tools/injectable-react";
 import type { AddWindowEventListener } from "../../window/event-listener.injectable";
 import windowAddEventListenerInjectable from "../../window/event-listener.injectable";
@@ -22,6 +23,7 @@ import matchedClusterIdInjectable from "../../navigation/matched-cluster-id.inje
 import hostedClusterIdInjectable from "../../cluster-frame-context/hosted-cluster-id.injectable";
 import isMacInjectable from "../../../common/vars/is-mac.injectable";
 import legacyOnChannelListenInjectable from "../../ipc/legacy-channel-listen.injectable";
+import catalogEntityRegistryInjectable from "../../api/catalog/entity/registry.injectable";
 
 interface Dependencies {
   addWindowEventListener: AddWindowEventListener;
@@ -30,6 +32,7 @@ interface Dependencies {
   matchedClusterId: IComputedValue<ClusterId | undefined>;
   isMac: boolean;
   legacyOnChannelListen: typeof ipcRendererOn;
+  entityRegistry: CatalogEntityRegistry;
 }
 
 @observer
@@ -105,5 +108,6 @@ export const CommandContainer = withInjectables<Dependencies>(NonInjectedCommand
     matchedClusterId: di.inject(matchedClusterIdInjectable),
     isMac: di.inject(isMacInjectable),
     legacyOnChannelListen: di.inject(legacyOnChannelListenInjectable),
+    entityRegistry: di.inject(catalogEntityRegistryInjectable),
   }),
 });
