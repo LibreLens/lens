@@ -144,7 +144,7 @@ export const getApplicationBuilder = () => {
 
   const clusterStoreStub = {
     provideInitialFromMain: () => {},
-    getById: (): null => null,
+    getById: () => null,
   } as unknown as ClusterStore;
 
   rendererDi.override(clusterStoreInjectable, () => clusterStoreStub);
