@@ -3,6 +3,7 @@
  * Licensed under MIT License. See LICENSE in root directory for more information.
  */
 
+import type { RenderResult } from "@testing-library/react";
 import type { ClusterStore } from "../../common/cluster-store/cluster-store";
 import clusterStoreInjectable from "../../common/cluster-store/cluster-store.injectable";
 import type { ClusterId } from "../../common/cluster-types";
@@ -19,6 +20,7 @@ describe("cluster connection status", () => {
   let clusters: Map<ClusterId, Cluster>;
   let cluster: Cluster;
   let applicationBuilder: ApplicationBuilder;
+  let result: RenderResult;
 
   beforeEach(async () => {
     applicationBuilder = getApplicationBuilder();
@@ -51,19 +53,6 @@ describe("cluster connection status", () => {
 
     applicationBuilder.dis.rendererDi.override(readFileSyncInjectable, () => readFileSyncMock);
 
-    const navigateToClusterView = applicationBuilder.dis.rendererDi.inject(navigateToClusterViewInjectable);
-    const createCluster = applicationBuilder.dis.rendererDi.inject(createClusterInjectable);
-
-    cluster = createCluster({
-      contextName: "minikube",
-      id: "some-cluster-id",
-      kubeConfigPath: "/some/file/path",
-    });
-
-    clusters = new Map();
-
-    clusters.set(cluster.id, cluster);
-
     clusterStore = ({
       clusters,
       get clustersList() {
@@ -75,8 +64,38 @@ describe("cluster connection status", () => {
     applicationBuilder.dis.mainDi.override(clusterStoreInjectable, () => clusterStore);
     applicationBuilder.dis.rendererDi.override(clusterStoreInjectable, () => clusterStore);
 
-    await applicationBuilder.render();
+    result = await applicationBuilder.render();
 
-    navigateToClusterView(cluster.id);
+    const createCluster = applicationBuilder.dis.rendererDi.inject(createClusterInjectable);
+
+    cluster = createCluster({
+      contextName: "minikube",
+      id: "some-cluster-id",
+      kubeConfigPath: "/some/file/path",
+    });
+
+    clusters = new Map();
+
+    clusters.set(cluster.id, cluster);
+  });
+
+  it("renders", () => {
+    expect(result.baseElement).toMatchSnapshot();
+  });
+
+  describe("when navigating to cluster connection", () => {
+    beforeEach(() => {
+      const navigateToClusterView = applicationBuilder.dis.rendererDi.inject(navigateToClusterViewInjectable);
+
+      navigateToClusterView(cluster.id);
+    });
+
+    it("renders", () => {
+      expect(result.baseElement).toMatchSnapshot();
+    });
+
+    it("shows cluster status screen", () => {
+      expect(result.queryByTestId("cluster-status")).not.toBeNull();
+    });
   });
 });
