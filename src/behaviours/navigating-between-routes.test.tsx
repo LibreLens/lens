@@ -73,7 +73,7 @@ describe("navigating between routes", () => {
       });
 
       it("does not have path parameters", () => {
-        const pathParameters = rendererDi.inject(routePathParametersInjectable, route);
+        const pathParameters = rendererDi.inject(routePathParametersInjectable)(route);
 
         expect(pathParameters.get()).toEqual({});
       });
@@ -145,7 +145,7 @@ describe("navigating between routes", () => {
       });
 
       it("knows path parameters", () => {
-        const pathParameters = rendererDi.inject(routePathParametersInjectable, route);
+        const pathParameters = rendererDi.inject(routePathParametersInjectable)(route);
 
         expect(pathParameters.get()).toEqual({
           someParameter: "some-value",
@@ -178,7 +178,7 @@ describe("navigating between routes", () => {
       });
 
       it("knows path parameters", () => {
-        const pathParameters = rendererDi.inject(routePathParametersInjectable, route);
+        const pathParameters = rendererDi.inject(routePathParametersInjectable)(route);
 
         expect(pathParameters.get()).toEqual({
           someParameter: undefined,
@@ -227,7 +227,7 @@ const routeWithOptionalPathParametersComponentInjectable = getInjectable({
 
   instantiate: (di) => {
     const route = di.inject(routeWithOptionalPathParametersInjectable);
-    const pathParameters = di.inject(routePathParametersInjectable, route);
+    const pathParameters = di.inject(routePathParametersInjectable)(route);
 
     return {
       route,
