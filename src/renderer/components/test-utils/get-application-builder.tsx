@@ -142,10 +142,15 @@ export const getApplicationBuilder = () => {
 
   const dis = { rendererDi, mainDi };
 
+  const clusters = observable.map<string, Cluster>();
   const clusterStoreStub = {
     provideInitialFromMain: () => {},
-    getById: () => null,
-  } as unknown as ClusterStore;
+    getById: (id) => clusters.get(id),
+    get clustersList() {
+      return [...clusters.values()];
+    },
+    clusters,
+  } as Partial<ClusterStore>;
 
   rendererDi.override(clusterStoreInjectable, () => clusterStoreStub);
   rendererDi.override(storesAndApisCanBeCreatedInjectable, () => true);

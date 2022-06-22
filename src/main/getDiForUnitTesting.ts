@@ -9,9 +9,6 @@ import type { DiContainer, Injectable } from "@ogre-tools/injectable";
 import { createContainer } from "@ogre-tools/injectable";
 import { Environments, setLegacyGlobalDiForExtensionApi } from "../extensions/as-legacy-globals-for-extension-api/legacy-global-di-for-extension-api";
 import appNameInjectable from "./app-paths/app-name/app-name.injectable";
-import writeJsonFileInjectable from "../common/fs/write-json-file.injectable";
-import readJsonFileInjectable from "../common/fs/read-json-file.injectable";
-import readFileInjectable from "../common/fs/read-file.injectable";
 import loggerInjectable from "../common/logger.injectable";
 import spawnInjectable from "./child-process/spawn.injectable";
 import extensionsStoreInjectable from "../extensions/extensions-store/extensions-store.injectable";
@@ -101,7 +98,7 @@ import { registerMobX } from "@ogre-tools/injectable-extension-for-mobx";
 import electronInjectable from "./utils/resolve-system-proxy/electron.injectable";
 import type { HotbarStore } from "../common/hotbars/store";
 import focusApplicationInjectable from "./electron-app/features/focus-application.injectable";
-import readFileSyncInjectable from "../common/fs/read-file-sync.injectable";
+import type { IpcMain } from "electron";
 
 export function getDiForUnitTesting(opts: { doGeneralOverrides?: boolean } = {}) {
   const {
@@ -172,11 +169,7 @@ export function getDiForUnitTesting(opts: { doGeneralOverrides?: boolean } = {})
       listHelmReleasesInjectable,
       rollbackHelmReleaseInjectable,
       updateHelmReleaseInjectable,
-      writeJsonFileInjectable,
-      readJsonFileInjectable,
-      readFileInjectable,
       execFileInjectable,
-      readFileSyncInjectable,
     ]);
 
     // TODO: Remove usages of globally exported appEventBus to get rid of this
@@ -258,7 +251,9 @@ const overrideElectronFeatures = (di: DiContainer) => {
   di.override(shouldStartHiddenInjectable, () => false);
   di.override(showMessagePopupInjectable, () => () => {});
   di.override(waitForElectronToBeReadyInjectable, () => () => Promise.resolve());
-  di.override(ipcMainInjectable, () => ({}));
+  di.override(ipcMainInjectable, () => ({
+    on: jest.fn(),
+  } as Partial<IpcMain>));
   di.override(getElectronThemeInjectable, () => () => "dark");
   di.override(syncThemeFromOperatingSystemInjectable, () => ({ start: () => {}, stop: () => {} }));
   di.override(electronQuitAndInstallUpdateInjectable, () => () => {});
