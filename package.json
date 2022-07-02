@@ -85,7 +85,7 @@
   },
   "build": {
     "publish": {
-      "url": "https://github.com/PhilippKuntschik/lens/releases/download/Latest",
+      "url": "https://github.com/lensapp/lens/releases/download/Latest",
       "provider": "generic"
     },
     "generateUpdatesFilesForAllChannels": true,
