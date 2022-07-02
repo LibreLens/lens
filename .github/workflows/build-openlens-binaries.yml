@@ -37,12 +37,12 @@ jobs:
           make build
           ls -la dist
           if [ "$RUNNER_OS" == "macOS" ]; then
-                cp dist/OpenLens-${{ env.VERSION_STRING }}-latest.*.dmg releasefiles/OpenLens-${{ env.VERSION_STRING }}.dmg
-                cp dist/OpenLens-${{ env.VERSION_STRING }}-latest.*.zip releasefiles/OpenLens-${{ env.VERSION_STRING }}.zip
+                cp dist/OpenLens-${{ env.VERSION_STRING }}.*.dmg releasefiles/OpenLens-${{ env.VERSION_STRING }}.dmg
+                cp dist/OpenLens-${{ env.VERSION_STRING }}.*.zip releasefiles/OpenLens-${{ env.VERSION_STRING }}.zip
           elif [ "$RUNNER_OS" == "Linux" ]; then
-                cp dist/OpenLens-${{ env.VERSION_STRING }}-latest.*.x86_64.AppImage releasefiles/OpenLens-${{ env.VERSION_STRING }}.AppImage
-                cp dist/OpenLens-${{ env.VERSION_STRING }}-latest.*.amd64.deb releasefiles/OpenLens-${{ env.VERSION_STRING }}.deb
-                cp dist/OpenLens-${{ env.VERSION_STRING }}-latest.*.x86_64.rpm releasefiles/OpenLens-${{ env.VERSION_STRING }}.rpm
+                cp dist/OpenLens-${{ env.VERSION_STRING }}.*.x86_64.AppImage releasefiles/OpenLens-${{ env.VERSION_STRING }}.AppImage
+                cp dist/OpenLens-${{ env.VERSION_STRING }}.*.amd64.deb releasefiles/OpenLens-${{ env.VERSION_STRING }}.deb
+                cp dist/OpenLens-${{ env.VERSION_STRING }}.*.x86_64.rpm releasefiles/OpenLens-${{ env.VERSION_STRING }}.rpm
           else
                 cp dist/OpenLens*.exe releasefiles/OpenLens-${{ env.VERSION_STRING }}.exe
           fi
