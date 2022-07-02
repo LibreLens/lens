@@ -41,6 +41,7 @@ jobs:
                 cp dist/OpenLens-${{ env.VERSION_STRING }}.*.dmg releasefiles/OpenLens-${{ env.VERSION_STRING }}.dmg
                 cp dist/OpenLens-${{ env.VERSION_STRING }}.*.zip releasefiles/OpenLens-${{ env.VERSION_STRING }}.zip
           elif [ "$RUNNER_OS" == "Linux" ]; then
+                ls -la dist
                 cp dist/OpenLens-${{ env.VERSION_STRING }}.*.x86_64.AppImage releasefiles/OpenLens-${{ env.VERSION_STRING }}.AppImage
                 cp dist/OpenLens-${{ env.VERSION_STRING }}.*.amd64.deb releasefiles/OpenLens-${{ env.VERSION_STRING }}.deb
                 cp dist/OpenLens-${{ env.VERSION_STRING }}.*.x86_64.rpm releasefiles/OpenLens-${{ env.VERSION_STRING }}.rpm
