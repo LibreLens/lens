@@ -1,0 +1,102 @@
+name: Build OpenLens
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ wip ]
+          
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+    
+      - name: Checkout
+        uses: actions/checkout@v3.0.2
+        
+      - name: Export version to variable
+        run: |
+            export VERSION_STRING=$(cat package.json | jq '.version' -r | xargs printf "v%s")
+            echo "VERSION_STRING=$VERSION_STRING" >> $GITHUB_ENV
+        shell: bash
+        
+      - uses: actions/setup-node@v3        
+        with:
+          node-version: 14.19.3
+          
+      - name: Update Lens
+        run: |
+          git clone https://github.com/lensapp/lens.git
+          cp update.js lens/update.js
+          cd lens
+          git checkout v${{ env.VERSION_STRING }}
+          node update.js
+          
+      - name: Build Lens
+        run: |
+          mkdir releasefiles
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            choco install visualstudio2019buildtools visualstudio2019-workload-vctools
+          fi
+          make build
+          if [ "$RUNNER_OS" == "macOS" ]; then
+                cp dist/OpenLens-${{ env.VERSION_STRING }}-latest.*.dmg releasefiles/OpenLens-${{ env.VERSION_STRING }}.dmg
+                cp dist/OpenLens-${{ env.VERSION_STRING }}-latest.*.zip releasefiles/OpenLens-${{ env.VERSION_STRING }}.zip
+          elif [ "$RUNNER_OS" == "Linux" ]; then
+                cp dist/OpenLens-${{ env.VERSION_STRING }}-latest.*.x86_64.AppImage releasefiles/OpenLens-${{ env.VERSION_STRING }}.AppImage
+                cp dist/OpenLens-${{ env.VERSION_STRING }}-latest.*.amd64.deb releasefiles/OpenLens-${{ env.VERSION_STRING }}.deb
+                cp dist/OpenLens-${{ env.VERSION_STRING }}-latest.*.x86_64.rpm releasefiles/OpenLens-${{ env.VERSION_STRING }}.rpm
+          else
+                cp dist/OpenLens*.exe releasefiles/OpenLens-${{ env.VERSION_STRING }}.exe
+          fi
+        shell: bash
+        working-directory: lens
+        
+      - name: Calculate SHA256 checksum
+        run: |
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            certutil -hashfile OpenLens-${{ env.VERSION_STRING }}.exe SHA256 > OpenLens-${{ env.VERSION_STRING }}.exe.sha256
+          else
+            for filename in OpenLens-${{ env.VERSION_STRING }}.*; do shasum -a 256 ${filename} > ${filename}.sha256 ; done
+          fi
+        shell: bash
+        working-directory: lens/releasefiles
+        
+      - name: Release
+        uses: softprops/action-gh-release@v0.1.14
+        with:
+          tag_name: v${{ env.VERSION_STRING }}
+          files: | 
+              lens/releasefiles/OpenLens-${{ env.VERSION_STRING }}.dmg
+              lens/releasefiles/OpenLens-${{ env.VERSION_STRING }}.AppImage
+              lens/releasefiles/OpenLens-${{ env.VERSION_STRING }}.deb
+              lens/releasefiles/OpenLens-${{ env.VERSION_STRING }}.rpm
+              lens/releasefiles/OpenLens-${{ env.VERSION_STRING }}.zip
+              lens/releasefiles/OpenLens-${{ env.VERSION_STRING }}.exe
+              lens/releasefiles/OpenLens-${{ env.VERSION_STRING }}.*.sha256
+              
+      - name: Clean latest tag
+        uses: mknejp/delete-release-assets@v1
+        with:
+          token: ${{ github.token }}
+          tag: Latest
+          fail-if-no-assets: false
+          fail-if-no-release: false
+          assets: | 
+            *.*
+      
+      - name: Release Latest
+        uses: softprops/action-gh-release@v0.1.14
+        with:
+          tag_name: Latest
+          files: | 
+              lens/dist/OpenLens*.dmg
+              lens/dist/OpenLens*.AppImage
+              lens/dist/OpenLens*.deb
+              lens/dist/OpenLens*.rpm
+              lens/dist/OpenLens*.exe
+              lens/dist/OpenLens*.zip
+              lens/dist/lates*.yml
