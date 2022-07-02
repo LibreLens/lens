@@ -45,7 +45,7 @@ jobs:
                 cp dist/OpenLens*.exe releasefiles/OpenLens-${{ env.VERSION_STRING }}.exe
           fi
         shell: bash
-        working-directory: lens
+        working-directory: .
         
       - name: Calculate SHA256 checksum
         run: |
