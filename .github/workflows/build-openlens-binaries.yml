@@ -27,14 +27,6 @@ jobs:
         with:
           node-version: 14.19.3
           
-      - name: Update Lens
-        run: |
-          git clone https://github.com/lensapp/lens.git
-          cp update.js lens/update.js
-          cd lens
-          git checkout v${{ env.VERSION_STRING }}
-          node update.js
-          
       - name: Build Lens
         run: |
           mkdir releasefiles
