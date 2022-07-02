@@ -1,9 +1,9 @@
-name: Build OpenLens
+name: Build OpenLens (release)
 
 on:
-  workflow_dispatch:
-  push:
-    branches: [ wip ]
+  release:
+    types:
+      - published
           
 jobs:
   build:
@@ -88,10 +88,10 @@ jobs:
         with:
           tag_name: Latest
           files: | 
-              lens/dist/OpenLens*.dmg
-              lens/dist/OpenLens*.AppImage
-              lens/dist/OpenLens*.deb
-              lens/dist/OpenLens*.rpm
-              lens/dist/OpenLens*.exe
-              lens/dist/OpenLens*.zip
-              lens/dist/lates*.yml
+              dist/OpenLens*.dmg
+              dist/OpenLens*.AppImage
+              dist/OpenLens*.deb
+              dist/OpenLens*.rpm
+              dist/OpenLens*.exe
+              dist/OpenLens*.zip
+              dist/lates*.yml
