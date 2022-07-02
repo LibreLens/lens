@@ -35,6 +35,7 @@ jobs:
             choco install visualstudio2019buildtools visualstudio2019-workload-vctools
           fi
           make build
+          ls -la dist
           if [ "$RUNNER_OS" == "macOS" ]; then
                 cp dist/OpenLens-${{ env.VERSION_STRING }}-latest.*.dmg releasefiles/OpenLens-${{ env.VERSION_STRING }}.dmg
                 cp dist/OpenLens-${{ env.VERSION_STRING }}-latest.*.zip releasefiles/OpenLens-${{ env.VERSION_STRING }}.zip
