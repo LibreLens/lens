@@ -9,7 +9,8 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+      # os: [ubuntu-latest, macos-latest, windows-latest]
+        os:[ubuntu-latest]        
         node-version: [16.x]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -35,8 +36,8 @@ jobs:
             choco install visualstudio2019buildtools visualstudio2019-workload-vctools
           fi
           make build
-          ls -la dist
           if [ "$RUNNER_OS" == "macOS" ]; then
+                ls -la dist
                 cp dist/OpenLens-${{ env.VERSION_STRING }}.*.dmg releasefiles/OpenLens-${{ env.VERSION_STRING }}.dmg
                 cp dist/OpenLens-${{ env.VERSION_STRING }}.*.zip releasefiles/OpenLens-${{ env.VERSION_STRING }}.zip
           elif [ "$RUNNER_OS" == "Linux" ]; then
