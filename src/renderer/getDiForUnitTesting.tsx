@@ -97,7 +97,6 @@ export const getDiForUnitTesting = (opts: { doGeneralOverrides?: boolean } = {})
     di.override(startTopbarStateSyncInjectable, () => ({
       run: () => {},
     }));
-
     di.override(terminalSpawningPoolInjectable, () => document.createElement("div"));
     di.override(hostedClusterIdInjectable, () => undefined);
 
