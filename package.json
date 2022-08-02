@@ -1,7 +1,7 @@
 {
   "name": "open-lens",
-  "productName": "OpenLens",
-  "description": "OpenLens - Open Source IDE for Kubernetes",
+  "productName": "LibreLens",
+  "description": "LibreLens - a OpenLens fork",
   "homepage": "https://github.com/lensapp/lens",
   "version": "6.0.0",
   "main": "static/build/main.js",

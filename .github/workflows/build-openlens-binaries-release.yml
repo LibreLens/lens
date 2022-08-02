@@ -1,4 +1,4 @@
-name: Build OpenLens (release)
+name: Build LibreLens (release)
 
 on:
   release:
@@ -37,15 +37,15 @@ jobs:
           make build
           if [ "$RUNNER_OS" == "macOS" ]; then
                 ls -la dist
-                cp dist/OpenLens-${{ env.VERSION_STRING }}.*.dmg releasefiles/OpenLens-${{ env.VERSION_STRING }}.dmg
-                cp dist/OpenLens-${{ env.VERSION_STRING }}.*.zip releasefiles/OpenLens-${{ env.VERSION_STRING }}.zip
+                cp dist/LibreLens-${{ env.VERSION_STRING }}.*.dmg releasefiles/LibreLens-${{ env.VERSION_STRING }}.dmg
+                cp dist/LibreLens-${{ env.VERSION_STRING }}.*.zip releasefiles/LibreLens-${{ env.VERSION_STRING }}.zip
           elif [ "$RUNNER_OS" == "Linux" ]; then
                 ls -la dist
-                cp dist/OpenLens-${{ env.VERSION_STRING }}.*.x86_64.AppImage releasefiles/OpenLens-${{ env.VERSION_STRING }}.AppImage
-                cp dist/OpenLens-${{ env.VERSION_STRING }}.*.amd64.deb releasefiles/OpenLens-${{ env.VERSION_STRING }}.deb
-                cp dist/OpenLens-${{ env.VERSION_STRING }}.*.x86_64.rpm releasefiles/OpenLens-${{ env.VERSION_STRING }}.rpm
+                cp dist/LibreLens-${{ env.VERSION_STRING }}.*.x86_64.AppImage releasefiles/LibreLens-${{ env.VERSION_STRING }}.AppImage
+                cp dist/LibreLens-${{ env.VERSION_STRING }}.*.amd64.deb releasefiles/LibreLens-${{ env.VERSION_STRING }}.deb
+                cp dist/LibreLens-${{ env.VERSION_STRING }}.*.x86_64.rpm releasefiles/LibreLens-${{ env.VERSION_STRING }}.rpm
           else
-                cp dist/OpenLens*.exe releasefiles/OpenLens-${{ env.VERSION_STRING }}.exe
+                cp dist/LibreLens*.exe releasefiles/LibreLens-${{ env.VERSION_STRING }}.exe
           fi
         shell: bash
         working-directory: .
@@ -53,9 +53,9 @@ jobs:
       - name: Calculate SHA256 checksum
         run: |
           if [ "$RUNNER_OS" == "Windows" ]; then
-            certutil -hashfile OpenLens-${{ env.VERSION_STRING }}.exe SHA256 > OpenLens-${{ env.VERSION_STRING }}.exe.sha256
+            certutil -hashfile LibreLens-${{ env.VERSION_STRING }}.exe SHA256 > LibreLens-${{ env.VERSION_STRING }}.exe.sha256
           else
-            for filename in OpenLens-${{ env.VERSION_STRING }}.*; do shasum -a 256 ${filename} > ${filename}.sha256 ; done
+            for filename in LibreLens-${{ env.VERSION_STRING }}.*; do shasum -a 256 ${filename} > ${filename}.sha256 ; done
           fi
         shell: bash
         working-directory: releasefiles
@@ -65,13 +65,13 @@ jobs:
         with:
           tag_name: v${{ env.VERSION_STRING }}
           files: | 
-              releasefiles/OpenLens-${{ env.VERSION_STRING }}.dmg
-              releasefiles/OpenLens-${{ env.VERSION_STRING }}.AppImage
-              releasefiles/OpenLens-${{ env.VERSION_STRING }}.deb
-              releasefiles/OpenLens-${{ env.VERSION_STRING }}.rpm
-              releasefiles/OpenLens-${{ env.VERSION_STRING }}.zip
-              releasefiles/OpenLens-${{ env.VERSION_STRING }}.exe
-              releasefiles/OpenLens-${{ env.VERSION_STRING }}.*.sha256
+              releasefiles/LibreLens-${{ env.VERSION_STRING }}.dmg
+              releasefiles/LibreLens-${{ env.VERSION_STRING }}.AppImage
+              releasefiles/LibreLens-${{ env.VERSION_STRING }}.deb
+              releasefiles/LibreLens-${{ env.VERSION_STRING }}.rpm
+              releasefiles/LibreLens-${{ env.VERSION_STRING }}.zip
+              releasefiles/LibreLens-${{ env.VERSION_STRING }}.exe
+              releasefiles/LibreLens-${{ env.VERSION_STRING }}.*.sha256
               
       - name: Clean latest tag
         uses: mknejp/delete-release-assets@v1
@@ -88,10 +88,10 @@ jobs:
         with:
           tag_name: Latest
           files: | 
-              dist/OpenLens*.dmg
-              dist/OpenLens*.AppImage
-              dist/OpenLens*.deb
-              dist/OpenLens*.rpm
-              dist/OpenLens*.exe
-              dist/OpenLens*.zip
+              dist/LibreLens*.dmg
+              dist/LibreLens*.AppImage
+              dist/LibreLens*.deb
+              dist/LibreLens*.rpm
+              dist/LibreLens*.exe
+              dist/LibreLens*.zip
               dist/lates*.yml
