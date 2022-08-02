@@ -1,30 +1,15 @@
-# Lens Open Source Project (OpenLens)
+# LibreLens ( a OpenLens fork)
 
-[![Build Status](https://github.com/lensapp/lens/actions/workflows/test.yml/badge.svg)](https://github.com/lensapp/lens/actions/workflows/test.yml)
-[![Chat on Slack](https://img.shields.io/badge/chat-on%20slack-blue.svg?logo=slack&longCache=true&style=flat)](https://join.slack.com/t/k8slens/shared_invite/zt-198iepl92-EPJsCckkJ~f887vWqJcgGA)
+This repository is a direct fork of the famous [OpenLens](https://github.com/lensapp/lens) project that includes0 binary builds for every stable or release version.
 
-## The Repository
+### Why is a fork necessary?
 
-This repository ("OpenLens") is where Team Lens develops the [Lens IDE](https://k8slens.dev) product together with the community. It is backed by a number of Kubernetes and cloud native ecosystem pioneers. This source code is available to everyone under the [MIT license](./LICENSE).
+As of today, Mirantis, the main developers behind Lens only release a [propritary version of Lens](https://k8slens.dev/) on their Website. While LibreLens can not provide any nameful support, it still offers many advantages compared to the Mirantis business solution:
 
-## Lens - The Kubernetes IDE
+- The propritary version [requires LensID](https://github.com/lensapp/lens/issues/5444) and your agreement to their Terms of Service. This open source build is MIT licensed and allows you to do with it whatever you want.
+- The propritary version adds additional features that you may want to have, especially if collaborating with a team. This open source build does only include the features that are not also included in this repository.
+- The proprietary version follows a subscription model that allows Mirantis to support your in your exact needs. This open source build provides you with a tool and that's all. No business support, no cost, no terms of service.
 
-Lens - The Kubernetes IDE ("Lens IDE") is a distribution of the OpenLens repository with Team Lens specific customizations released under a traditional [EULA](https://k8slens.dev/licenses/eula).
+# Disclaimer
 
-Lens IDE provides the full situational awareness for everything that runs in Kubernetes. It's lowering the barrier of entry for people just getting started and radically improving productivity for people with more experience.
-
-Lens IDE a standalone application for MacOS, Windows and Linux operating systems. You can download it free of charge for Windows, MacOS, and Linux from [Lens IDE website](https://k8slens.dev).
-
-[![Screenshot](.github/screenshot.png)](https://www.youtube.com/watch?v=eeDwdVXattc)
-
-## Installation
-
-See [Getting Started](https://docs.k8slens.dev/main/getting-started/install-lens/) page.
-
-## Development
-
-See [Development](https://docs.k8slens.dev/latest/contributing/development/) page.
-
-## Contributing
-
-See [Contributing](https://docs.k8slens.dev/latest/contributing/) page.
+This software is provided by the maintainers "as is". In no event shall the maintainers be liable for any direct, indirect, incidental, special, exemplary, or consequential damages (including, but not limited to procurement of substitute goods or services; loss of use, data, or profits; or business interruption) however caused and on any theory of liability, whether in contract, strict liability, or tort (including negligence or otherwise) arising in any way out of the use of this software, even if advised of the possibility of such damage.
