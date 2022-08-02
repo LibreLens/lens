@@ -37,13 +37,13 @@ jobs:
           make build
           if [ "$RUNNER_OS" == "macOS" ]; then
                 ls -la dist
-                cp dist/LibreLens-${{ env.VERSION_STRING }}.*.dmg releasefiles/LibreLens-${{ env.VERSION_STRING }}.dmg
-                cp dist/LibreLens-${{ env.VERSION_STRING }}.*.zip releasefiles/LibreLens-${{ env.VERSION_STRING }}.zip
+                cp dist/LibreLens-${{ env.VERSION_STRING }}*.dmg releasefiles/LibreLens-${{ env.VERSION_STRING }}.dmg
+                cp dist/LibreLens-${{ env.VERSION_STRING }}*.zip releasefiles/LibreLens-${{ env.VERSION_STRING }}.zip
           elif [ "$RUNNER_OS" == "Linux" ]; then
                 ls -la dist
-                cp dist/LibreLens-${{ env.VERSION_STRING }}.*.x86_64.AppImage releasefiles/LibreLens-${{ env.VERSION_STRING }}.AppImage
-                cp dist/LibreLens-${{ env.VERSION_STRING }}.*.amd64.deb releasefiles/LibreLens-${{ env.VERSION_STRING }}.deb
-                cp dist/LibreLens-${{ env.VERSION_STRING }}.*.x86_64.rpm releasefiles/LibreLens-${{ env.VERSION_STRING }}.rpm
+                cp dist/LibreLens-${{ env.VERSION_STRING }}*.x86_64.AppImage releasefiles/LibreLens-${{ env.VERSION_STRING }}.AppImage
+                cp dist/LibreLens-${{ env.VERSION_STRING }}*.amd64.deb releasefiles/LibreLens-${{ env.VERSION_STRING }}.deb
+                cp dist/LibreLens-${{ env.VERSION_STRING }}*.x86_64.rpm releasefiles/LibreLens-${{ env.VERSION_STRING }}.rpm
           else
                 cp dist/LibreLens*.exe releasefiles/LibreLens-${{ env.VERSION_STRING }}.exe
           fi
