@@ -1,6 +1,6 @@
-# LibreLens ( a OpenLens fork)
+# LibreLens (an OpenLens fork)
 
-This repository is a direct fork of the famous [OpenLens](https://github.com/lensapp/lens) project that includes0 binary builds for every stable or release version.
+This repository is a direct fork of the famous [OpenLens](https://github.com/lensapp/lens) project that includes binary builds for every stable or release version.
 
 ### Why is a fork necessary?
 
@@ -8,7 +8,7 @@ As of today, Mirantis, the main developers behind Lens only release a [propritar
 
 - The propritary version [requires LensID](https://github.com/lensapp/lens/issues/5444) and your agreement to their Terms of Service. This open source build is MIT licensed and allows you to do with it whatever you want.
 - The propritary version adds additional features that you may want to have, especially if collaborating with a team. This open source build does only include the features that are not also included in this repository.
-- The proprietary version follows a subscription model that allows Mirantis to support your in your exact needs. This open source build provides you with a tool and that's all. No business support, no cost, no terms of service.
+- The proprietary version follows a subscription model that allows Mirantis to support your exact needs. This open source build provides you with a tool and that's it. No business support, no cost, no terms of service.
 
 # Disclaimer
 
