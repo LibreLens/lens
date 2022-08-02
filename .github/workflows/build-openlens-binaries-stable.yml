@@ -3,7 +3,7 @@ name: Build OpenLens (stable)
 on:
   push:
     branches:
-      - master
+      - feature/actions-package
           
 jobs:
   build:
