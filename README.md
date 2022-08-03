@@ -12,9 +12,71 @@ As of today, Mirantis, the main developers behind Lens only release a [propritar
 
 # Build Lens on your own system
 
+the following instructions are heavily inspired by github user [jslay88](https://github.com/lensapp/lens/issues/5444#issuecomment-1140483224)
+
+
 ### Mac
+##### Install Dependencies
+- [homebrew requirements](https://docs.brew.sh/Installation#macos-requirements)
+- [homebrew](https://github.com/Homebrew/install)
+- git, make via brew: `brew install git make`
+- [nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+##### Build and Install LibreLens
+```bash
+# set up node 14 and yarn
+nvm install 14
+nvm use 14
+npm install -g yarn
+
+# build LibreLens
+https://github.com/LibreLens/lens.git
+cd lens
+make build
+
+# install LibreLens
+cp -Rfp dist/mac/OpenLens.app ~/Applications/
+```
+
 ### Windows
+##### Install Dependencies
+- `choco install make visualstudio2019buildtools visualstudio2019-workload-vctools`
+- [nvm for windows](https://github.com/coreybutler/nvm-windows#installation--upgrades)
+##### Build and Install LibreLens
+```bash
+# set up node 14 and yarn
+nvm install 14
+nvm use 14
+npm install -g yarn
+
+# build LibreLens
+https://github.com/LibreLens/lens.git
+cd lens
+make build
+
+# install LibreLens
+start ./dist/'LibreLens Setup <your-version>.exe'
+```
+
 ### Debian-based systems
+- `sudo apt-get install -y g++ make curl git`
+- [nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+##### Install Dependencies
+##### Build and Install LibreLens
+```bash
+# set up node 14 and yarn
+nvm install 14
+nvm use 14
+npm install -g yarn
+
+# build LibreLens
+https://github.com/LibreLens/lens.git
+cd lens
+make build
+
+# install LibreLens
+sudo dpkg -i dist/OpenLens-<your-version>.deb
+```
+
 
 # Disclaimer
 
