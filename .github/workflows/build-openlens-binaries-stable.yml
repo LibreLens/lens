@@ -3,7 +3,7 @@ name: Build LibreLens (stable)
 on:
   push:
     branches:
-      - feature/actions-package
+      - master
           
 jobs:
   build:
