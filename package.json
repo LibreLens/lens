@@ -8,7 +8,8 @@
   "copyright": "© 2022 OpenLens Authors, LibreLens Authors",
   "license": "MIT",
   "author": {
-    "name": "OpenLens Authors"
+    "name": "LibreLens"
+    "email": "noreply@librelens.org"
   },
   "scripts": {
     "dev": "concurrently -i -k \"yarn run dev-run -C\" yarn:dev:*",
