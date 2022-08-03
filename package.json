@@ -8,7 +8,7 @@
   "copyright": "© 2022 OpenLens Authors, LibreLens Authors",
   "license": "MIT",
   "author": {
-    "name": "LibreLens"
+    "name": "LibreLens",
     "email": "noreply@librelens.org"
   },
   "scripts": {
