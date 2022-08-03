@@ -2,7 +2,7 @@
   "name": "open-lens",
   "productName": "LibreLens",
   "description": "LibreLens - a OpenLens fork",
-  "homepage": "https://github.com/lensapp/lens",
+  "homepage": "https://github.com/librelens/lens",
   "version": "6.0.0",
   "main": "static/build/main.js",
   "copyright": "© 2022 OpenLens Authors, LibreLens Authors",
@@ -85,7 +85,7 @@
   },
   "build": {
     "publish": {
-      "url": "https://github.com/lensapp/lens/releases/download/Latest",
+      "url": "https://github.com/librelens/lens/releases/download/Latest",
       "provider": "generic"
     },
     "generateUpdatesFilesForAllChannels": true,
