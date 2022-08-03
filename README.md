@@ -16,6 +16,7 @@ As of today, Mirantis, the main developers behind Lens only release a [propritar
 
 Packages are not code signed which may be a problem on Windows or Mac computers if you are not able to elevate priviledges. For code signed packages, a mac/windows developer account is neccessary. If you are able to provide the necessary resources for code signing, please let me know in the respective issue for [windows](https://github.com/LibreLens/lens/issues/9) or [mac](https://github.com/LibreLens/lens/issues/5)
 
+You can also have a look at https://github.com/MuhammedKalkan/OpenLens, which is the original inspiration of the github actions.
 
 # Build Lens on your own system
 
