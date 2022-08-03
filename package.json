@@ -5,11 +5,10 @@
   "homepage": "https://github.com/lensapp/lens",
   "version": "6.0.0",
   "main": "static/build/main.js",
-  "copyright": "© 2022 OpenLens Authors",
+  "copyright": "© 2022 OpenLens Authors, LibreLens Authors",
   "license": "MIT",
   "author": {
-    "name": "OpenLens Authors",
-    "email": "info@k8slens.dev"
+    "name": "OpenLens Authors"
   },
   "scripts": {
     "dev": "concurrently -i -k \"yarn run dev-run -C\" yarn:dev:*",

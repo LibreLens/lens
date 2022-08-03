@@ -12,9 +12,9 @@ import { _electron as electron } from "playwright";
 import { noop } from "lodash";
 
 export const appPaths: Partial<Record<NodeJS.Platform, string>> = {
-  "win32": "./dist/win-unpacked/OpenLens.exe",
+  "win32": "./dist/win-unpacked/LibreLens.exe",
   "linux": "./dist/linux-unpacked/open-lens",
-  "darwin": "./dist/mac/OpenLens.app/Contents/MacOS/OpenLens",
+  "darwin": "./dist/mac/LibreLens.app/Contents/MacOS/LibreLens",
 };
 
 export function itIf(condition: boolean) {

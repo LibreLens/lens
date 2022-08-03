@@ -18,7 +18,7 @@ export function getClusterIdFromHost(host: string): ClusterId | undefined {
 }
 
 /**
- * Get the OpenLens backend routing host for a given `ClusterId`
+ * Get the LibreLens backend routing host for a given `ClusterId`
  * @param clusterId The ID to put in front of the current host
  * @returns a new URL host section
  */

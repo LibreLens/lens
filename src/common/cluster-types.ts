@@ -140,7 +140,7 @@ export enum ClusterMetadataKey {
 }
 
 /**
- * A shorthand enum for resource types that have metrics attached to them via OpenLens metrics stack
+ * A shorthand enum for resource types that have metrics attached to them via LibreLens metrics stack
  */
 export enum ClusterMetricsResourceType {
   Cluster = "Cluster",
