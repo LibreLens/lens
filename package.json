@@ -1,15 +1,15 @@
 {
   "name": "open-lens",
-  "productName": "OpenLens",
-  "description": "OpenLens - Open Source IDE for Kubernetes",
-  "homepage": "https://github.com/lensapp/lens",
+  "productName": "LibreLens",
+  "description": "LibreLens - a OpenLens fork",
+  "homepage": "https://github.com/librelens/lens",
   "version": "6.0.0",
   "main": "static/build/main.js",
-  "copyright": "© 2022 OpenLens Authors",
+  "copyright": "© 2022 OpenLens Authors, LibreLens Authors",
   "license": "MIT",
   "author": {
-    "name": "OpenLens Authors",
-    "email": "info@k8slens.dev"
+    "name": "LibreLens",
+    "email": "noreply@librelens.org"
   },
   "scripts": {
     "dev": "concurrently -i -k \"yarn run dev-run -C\" yarn:dev:*",
@@ -84,6 +84,10 @@
     "runtime": "@side/jest-runtime"
   },
   "build": {
+    "publish": {
+      "url": "https://github.com/librelens/lens/releases/download/Latest",
+      "provider": "generic"
+    },
     "generateUpdatesFilesForAllChannels": true,
     "files": [
       "static/build/main.js"

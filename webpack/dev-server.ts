@@ -30,7 +30,7 @@ const server = new WebpackDevServer({
   liveReload: false,
   devMiddleware: {
     writeToDisk: false,
-    index: "OpenLensDev.html",
+    index: "LibreLensDev.html",
     publicPath: "/build",
   },
   proxy: {

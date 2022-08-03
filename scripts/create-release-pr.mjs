@@ -156,7 +156,7 @@ const prBodyLines = [
 ];
 
 function getPrEntry(pr) {
-  return `- ${pr.title} (**[#${pr.number}](https://github.com/lensapp/lens/pull/${pr.number})**) https://github.com/${pr.author.login}`;
+  return `- ${pr.title} (**[#${pr.number}](https://github.com/librelens/lens/pull/${pr.number})**) https://github.com/${pr.author.login}`;
 }
 
 if (enhancementPrs.length > 0) {

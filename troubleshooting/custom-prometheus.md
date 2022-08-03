@@ -35,7 +35,7 @@ The required label replacements are bundled in [jsonnet/lens/custom-prometheus](
 [Jsonnet Bundler](https://github.com/jsonnet-bundler/jsonnet-bundler).
 
 ```bash
-jb init && jb install https://github.com/lensapp/lens/jsonnet/lens@master
+jb init && jb install https://github.com/librelens/lens/jsonnet/lens@master
 ```
 
 When the installation was successful include it into your definitions. Using the [example](https://github.com/coreos/kube-prometheus#compiling) 
