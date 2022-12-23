@@ -14,8 +14,9 @@ const startReactiveTrayMenuIconInjectable = getInjectable({
     const reactiveTrayMenuIcon = di.inject(reactiveTrayMenuIconInjectable);
 
     return {
-      run: async () => {
-        await reactiveTrayMenuIcon.start();
+      id: "start-reactive-tray-menu-icon",
+      run: () => {
+        reactiveTrayMenuIcon.start();
       },
 
       runAfter: di.inject(startTrayInjectable),

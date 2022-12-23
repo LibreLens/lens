@@ -3,19 +3,14 @@
  * Licensed under MIT License. See LICENSE in root directory for more information.
  */
 
-import { ipcRenderer } from "electron";
+import { ipcMain, ipcRenderer } from "electron";
 import { isEqual } from "lodash";
 import type { ObservableMap } from "mobx";
 import { action, computed, makeObservable, observable, observe, reaction, when } from "mobx";
-import path from "path";
 import { broadcastMessage, ipcMainOn, ipcRendererOn, ipcMainHandle } from "../../common/ipc";
-import type { Disposer } from "../../common/utils";
 import { isDefined, toJS } from "../../common/utils";
-import logger from "../../main/logger";
 import type { InstalledExtension } from "../extension-discovery/extension-discovery";
 import type { LensExtension, LensExtensionConstructor, LensExtensionId } from "../lens-extension";
-import type { LensRendererExtension } from "../lens-renderer-extension";
-import * as registries from "../registries";
 import type { LensExtensionState } from "../extensions-store/extensions-store";
 import { extensionLoaderFromMainChannel, extensionLoaderFromRendererChannel } from "../../common/ipc/extension-handling";
 import { requestExtensionLoaderInitialState } from "../../renderer/ipc";
@@ -23,14 +18,29 @@ import assert from "assert";
 import { EventEmitter } from "../../common/event-emitter";
 import type { CreateExtensionInstance } from "./create-extension-instance.token";
 import type { Extension } from "./extension/extension.injectable";
+import type { Logger } from "../../common/logger";
+import type { JoinPaths } from "../../common/path/join-paths.injectable";
+import type { GetDirnameOfPath } from "../../common/path/get-dirname.injectable";
+import type { BundledExtension } from "../extension-discovery/bundled-extension-token";
 
 const logModule = "[EXTENSIONS-LOADER]";
 
 interface Dependencies {
+  readonly extensionInstances: ObservableMap<LensExtensionId, LensExtension>;
+  readonly bundledExtensions: BundledExtension[];
+  readonly logger: Logger;
+  readonly extensionEntryPointName: "main" | "renderer";
   updateExtensionsState: (extensionsState: Record<LensExtensionId, LensExtensionState>) => void;
   createExtensionInstance: CreateExtensionInstance;
-  readonly extensionInstances: ObservableMap<LensExtensionId, LensExtension>;
   getExtension: (instance: LensExtension) => Extension;
+  joinPaths: JoinPaths;
+  getDirnameOfPath: GetDirnameOfPath;
+}
+
+interface ExtensionBeingActivated {
+  instance: LensExtension;
+  installedExtension: InstalledExtension;
+  activated: Promise<void>;
 }
 
 export interface ExtensionLoading {
@@ -127,10 +137,10 @@ export class ExtensionLoader {
 
   @action
   async init() {
-    if (ipcRenderer) {
-      await this.initRenderer();
-    } else {
+    if (ipcMain) {
       await this.initMain();
+    } else {
+      await this.initRenderer();
     }
 
     await Promise.all([this.whenLoaded]);
@@ -159,7 +169,7 @@ export class ExtensionLoader {
 
   @action
   removeInstance(lensExtensionId: LensExtensionId) {
-    logger.info(`${logModule} deleting extension instance ${lensExtensionId}`);
+    this.dependencies.logger.info(`${logModule} deleting extension instance ${lensExtensionId}`);
     const instance = this.dependencies.extensionInstances.get(lensExtensionId);
 
     if (!instance) {
@@ -177,7 +187,7 @@ export class ExtensionLoader {
       this.dependencies.extensionInstances.delete(lensExtensionId);
       this.nonInstancesByName.delete(instance.name);
     } catch (error) {
-      logger.error(`${logModule}: deactivation extension error`, { lensExtensionId, error });
+      this.dependencies.logger.error(`${logModule}: deactivation extension error`, { lensExtensionId, error });
     }
   }
 
@@ -199,7 +209,7 @@ export class ExtensionLoader {
 
   protected async initMain() {
     this.isLoaded = true;
-    this.loadOnMain();
+    await this.autoInitExtensions();
 
     ipcMainHandle(extensionLoaderFromMainChannel, () => {
       return Array.from(this.toJSON());
@@ -247,46 +257,84 @@ export class ExtensionLoader {
     });
   }
 
-  loadOnMain() {
-    this.autoInitExtensions(() => Promise.resolve([]));
+  protected async loadBundledExtensions() {
+    return this.dependencies.bundledExtensions
+      .map(extension => {
+        try {
+          const LensExtensionClass = extension[this.dependencies.extensionEntryPointName]();
+
+          if (!LensExtensionClass) {
+            return null;
+          }
+
+          const installedExtension: InstalledExtension = {
+            absolutePath: "irrelevant",
+            id: extension.manifest.name,
+            isBundled: true,
+            isCompatible: true,
+            isEnabled: true,
+            manifest: extension.manifest,
+            manifestPath: "irrelevant",
+          };
+          const instance = this.dependencies.createExtensionInstance(
+            LensExtensionClass,
+            installedExtension,
+          );
+
+          this.dependencies.extensionInstances.set(extension.manifest.name, instance);
+
+          return {
+            instance,
+            installedExtension,
+            activated: instance.activate(),
+          } as ExtensionBeingActivated;
+        } catch (err) {
+          this.dependencies.logger.error(`${logModule}: error loading extension`, { ext: extension, err });
+
+          return null;
+        }
+      })
+      .filter(isDefined);
   }
 
-  loadOnClusterManagerRenderer = () => {
-    logger.debug(`${logModule}: load on main renderer (cluster manager)`);
+  protected async loadExtensions(extensions: ExtensionBeingActivated[]): Promise<ExtensionLoading[]> {
+    // We first need to wait until each extension's `onActivate` is resolved or rejected,
+    // as this might register new catalog categories. Afterwards we can safely .enable the extension.
+    await Promise.all(
+      extensions.map(extension =>
+        // If extension activation fails, log error
+        extension.activated.catch((error) => {
+          this.dependencies.logger.error(`${logModule}: activation extension error`, { ext: extension.installedExtension, error });
+        }),
+      ),
+    );
 
-    return this.autoInitExtensions(async (ext) => {
-      const extension = ext as LensRendererExtension;
-      const removeItems = [
-        registries.EntitySettingRegistry.getInstance().add(extension.entitySettings),
-        registries.CatalogEntityDetailRegistry.getInstance().add(extension.catalogEntityDetailItems),
-      ];
+    extensions.forEach(({ instance }) => {
+      const extension = this.dependencies.getExtension(instance);
 
-      this.onRemoveExtensionId.addListener((removedExtensionId) => {
-        if (removedExtensionId === extension.id) {
-          removeItems.forEach(remove => {
-            remove();
-          });
-        }
+      extension.register();
+    });
+
+    return extensions.map(extension => {
+      const loaded = extension.instance.enable().catch((err) => {
+        this.dependencies.logger.error(`${logModule}: failed to enable`, { ext: extension, err });
       });
 
-      return removeItems;
+      return {
+        isBundled: extension.installedExtension.isBundled,
+        loaded,
+      };
     });
-  };
+  }
 
-  loadOnClusterRenderer = () => {
-    logger.debug(`${logModule}: load on cluster renderer (dashboard)`);
-
-    this.autoInitExtensions(async () => []);
-  };
-
-  protected async loadExtensions(installedExtensions: Map<string, InstalledExtension>, register: (ext: LensExtension) => Promise<Disposer[]>) {
+  protected async loadUserExtensions(installedExtensions: Map<string, InstalledExtension>) {
     // Steps of the function:
     // 1. require and call .activate for each Extension
     // 2. Wait until every extension's onActivate has been resolved
     // 3. Call .enable for each extension
     // 4. Return ExtensionLoading[]
 
-    const extensions = [...installedExtensions.entries()]
+    return [...installedExtensions.entries()]
       .map(([extId, extension]) => {
         const alreadyInit = this.dependencies.extensionInstances.has(extId) || this.nonInstancesByName.has(extension.manifest.name);
 
@@ -311,9 +359,9 @@ export class ExtensionLoader {
               instance,
               installedExtension: extension,
               activated: instance.activate(),
-            };
+            } as ExtensionBeingActivated;
           } catch (err) {
-            logger.error(`${logModule}: error loading extension`, { ext: extension, err });
+            this.dependencies.logger.error(`${logModule}: error loading extension`, { ext: extension, err });
           }
         } else if (!extension.isEnabled && alreadyInit) {
           this.removeInstance(extId);
@@ -321,63 +369,46 @@ export class ExtensionLoader {
 
         return null;
       })
-      // Remove null values
       .filter(isDefined);
-
-    // We first need to wait until each extension's `onActivate` is resolved or rejected,
-    // as this might register new catalog categories. Afterwards we can safely .enable the extension.
-    await Promise.all(
-      extensions.map(extension =>
-        // If extension activation fails, log error
-        extension.activated.catch((error) => {
-          logger.error(`${logModule}: activation extension error`, { ext: extension.installedExtension, error });
-        }),
-      ),
-    );
-
-    extensions.forEach(({ instance }) => {
-      const extension = this.dependencies.getExtension(instance);
-
-      extension.register();
-    });
-
-    // Return ExtensionLoading[]
-    return extensions.map(extension => {
-      const loaded = extension.instance.enable(register).catch((err) => {
-        logger.error(`${logModule}: failed to enable`, { ext: extension, err });
-      });
-
-      return {
-        isBundled: extension.installedExtension.isBundled,
-        loaded,
-      };
-    });
   }
 
-  protected autoInitExtensions(register: (ext: LensExtension) => Promise<Disposer[]>) {
-    // Setup reaction to load extensions on JSON changes
-    reaction(() => this.toJSON(), installedExtensions => this.loadExtensions(installedExtensions, register));
+  async autoInitExtensions() {
+    this.dependencies.logger.info(`${logModule}: auto initializing extensions`);
 
-    // Load initial extensions
-    return this.loadExtensions(this.toJSON(), register);
+    const bundledExtensions = await this.loadBundledExtensions();
+    const userExtensions = await this.loadUserExtensions(this.toJSON());
+    const loadedExtensions = await this.loadExtensions([
+      ...bundledExtensions,
+      ...userExtensions,
+    ]);
+
+    // Setup reaction to load extensions on JSON changes
+    reaction(() => this.toJSON(), installedExtensions => {
+      void (async () => {
+        const userExtensions = await this.loadUserExtensions(installedExtensions);
+
+        await this.loadExtensions(userExtensions);
+      })();
+    });
+
+    return loadedExtensions;
   }
 
   protected requireExtension(extension: InstalledExtension): LensExtensionConstructor | null {
-    const entryPointName = ipcRenderer ? "renderer" : "main";
-    const extRelativePath = extension.manifest[entryPointName];
+    const extRelativePath = extension.manifest[this.dependencies.extensionEntryPointName];
 
     if (!extRelativePath) {
       return null;
     }
 
-    const extAbsolutePath = path.resolve(path.join(path.dirname(extension.manifestPath), extRelativePath));
+    const extAbsolutePath = this.dependencies.joinPaths(this.dependencies.getDirnameOfPath(extension.manifestPath), extRelativePath);
 
     try {
       return __non_webpack_require__(extAbsolutePath).default;
     } catch (error) {
       const message = (error instanceof Error ? error.stack : undefined) || error;
 
-      logger.error(`${logModule}: can't load ${entryPointName} for "${extension.manifest.name}": ${message}`, { extension });
+      this.dependencies.logger.error(`${logModule}: can't load ${this.dependencies.extensionEntryPointName} for "${extension.manifest.name}": ${message}`, { extension });
     }
 
     return null;

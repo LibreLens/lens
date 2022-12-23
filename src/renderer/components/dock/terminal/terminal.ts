@@ -10,21 +10,23 @@ import { Terminal as XTerm } from "xterm";
 import { FitAddon } from "xterm-addon-fit";
 import type { TabId } from "../dock/store";
 import type { TerminalApi } from "../../../api/terminal-api";
-import type { ThemeStore } from "../../../themes/store";
 import { disposer } from "../../../utils";
-import { isMac } from "../../../../common/vars";
 import { once } from "lodash";
 import { clipboard } from "electron";
 import logger from "../../../../common/logger";
 import type { TerminalConfig } from "../../../../common/user-store/preferences-helpers";
 import assert from "assert";
 import { TerminalChannels } from "../../../../common/terminal/channels";
+import { LinkProvider } from "xterm-link-provider";
+import type { OpenLinkInBrowser } from "../../../../common/utils/open-link-in-browser.injectable";
 
 export interface TerminalDependencies {
   readonly spawningPool: HTMLElement;
   readonly terminalConfig: IComputedValue<TerminalConfig>;
   readonly terminalCopyOnSelect: IComputedValue<boolean>;
-  readonly themeStore: ThemeStore;
+  readonly isMac: boolean;
+  readonly xtermColorTheme: IComputedValue<Record<string, string>>;
+  openLinkInBrowser: OpenLinkInBrowser;
 }
 
 export interface TerminalArguments {
@@ -72,10 +74,6 @@ export class Terminal {
     return this.dependencies.terminalConfig.get().fontSize;
   }
 
-  get theme(): Record<string/*paramName*/, string/*color*/> {
-    return this.dependencies.themeStore.xtermColors;
-  }
-
   constructor(protected readonly dependencies: TerminalDependencies, {
     tabId,
     api,
@@ -93,7 +91,6 @@ export class Terminal {
     this.xterm.loadAddon(this.fitAddon);
 
     this.xterm.open(this.dependencies.spawningPool);
-    this.xterm.registerLinkMatcher(/https?:\/\/[^\s]+/i, this.onClickLink);
     this.xterm.attachCustomKeyEventHandler(this.keyHandler);
     this.xterm.onSelectionChange(this.onSelectionChange);
 
@@ -108,10 +105,22 @@ export class Terminal {
     this.api.on("data", this.onApiData);
     window.addEventListener("resize", this.onResize);
 
+    const linkProvider = new LinkProvider(
+      this.xterm,
+      /https?:\/\/[^\s]+/i,
+      (event, link) => this.dependencies.openLinkInBrowser(link),
+      undefined,
+      0,
+    );
+
     this.disposer.push(
-      reaction(() => this.theme, colors => this.xterm.setOption("theme", colors), {
-        fireImmediately: true,
-      }),
+      this.xterm.registerLinkProvider(linkProvider),
+      reaction(() => this.dependencies.xtermColorTheme.get(),
+        colors => this.xterm.options.theme = colors,
+        {
+          fireImmediately: true,
+        },
+      ),
       reaction(() => this.fontSize, this.setFontSize, { fireImmediately: true }),
       reaction(() => this.fontFamily, this.setFontFamily, { fireImmediately: true }),
       () => onDataHandler.dispose(),
@@ -167,10 +176,6 @@ export class Terminal {
     this.fit();
     setTimeout(() => this.focus(), 250); // delay used to prevent focus on active tab
     this.viewport.scrollTop = this.scrollPos; // restore last scroll position
-  };
-
-  onClickLink = (evt: MouseEvent, link: string) => {
-    window.open(link, "_blank");
   };
 
   onContextMenu = () => {
@@ -229,7 +234,7 @@ export class Terminal {
     }
 
     //Ctrl+K: clear the entire buffer, making the prompt line the new first line on mac os
-    if (isMac && metaKey) {
+    if (this.dependencies.isMac && metaKey) {
       switch (code) {
         case "KeyK":
           this.onClear();

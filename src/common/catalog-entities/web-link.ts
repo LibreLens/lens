@@ -3,10 +3,11 @@
  * Licensed under MIT License. See LICENSE in root directory for more information.
  */
 
+import { Environments, getEnvironmentSpecificLegacyGlobalDiForExtensionApi } from "../../extensions/as-legacy-globals-for-extension-api/legacy-global-di-for-extension-api";
 import type { CatalogEntityContextMenuContext, CatalogEntityMetadata, CatalogEntityStatus } from "../catalog";
 import { CatalogCategory, CatalogEntity, categoryVersion } from "../catalog/catalog-entity";
-import { productName } from "../vars";
-import { WeblinkStore } from "../weblink-store";
+import productNameInjectable from "../vars/product-name.injectable";
+import weblinkStoreInjectable from "../weblinks-store/weblink-store.injectable";
 
 export type WebLinkStatusPhase = "available" | "unavailable";
 
@@ -30,11 +31,16 @@ export class WebLink extends CatalogEntity<CatalogEntityMetadata, WebLinkStatus,
   }
 
   onContextMenuOpen(context: CatalogEntityContextMenuContext) {
+    // NOTE: this is safe because `onContextMenuOpen` is only supposed to be called in the renderer
+    const di = getEnvironmentSpecificLegacyGlobalDiForExtensionApi(Environments.renderer);
+    const productName = di.inject(productNameInjectable);
+    const weblinkStore = di.inject(weblinkStoreInjectable);
+
     if (this.metadata.source === "local") {
       context.menuItems.push({
         title: "Delete",
         icon: "delete",
-        onClick: async () => WeblinkStore.getInstance().removeById(this.getId()),
+        onClick: async () => weblinkStore.removeById(this.getId()),
         confirm: {
           message: `Remove Web Link "${this.getName()}" from ${productName}?`,
         },

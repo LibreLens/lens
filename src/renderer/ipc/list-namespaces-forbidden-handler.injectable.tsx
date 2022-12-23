@@ -6,11 +6,12 @@ import { getInjectable } from "@ogre-tools/injectable";
 import navigateToEntitySettingsInjectable from "../../common/front-end-routing/routes/entity-settings/navigate-to-entity-settings.injectable";
 import type { ListNamespaceForbiddenArgs } from "../../common/ipc/cluster";
 import { Notifications } from "../components/notifications";
-import { ClusterStore } from "../../common/cluster-store/cluster-store";
 import { Button } from "../components/button";
 import type { IpcRendererEvent } from "electron";
 import React from "react";
 import notificationsStoreInjectable from "../components/notifications/notifications-store.injectable";
+import { getMillisecondsFromUnixEpoch } from "../../common/utils/date/get-current-date-time";
+import getClusterByIdInjectable from "../../common/cluster-store/get-by-id.injectable";
 
 const listNamespacesForbiddenHandlerInjectable = getInjectable({
   id: "list-namespaces-forbidden-handler",
@@ -18,7 +19,7 @@ const listNamespacesForbiddenHandlerInjectable = getInjectable({
   instantiate: (di) => {
     const navigateToEntitySettings = di.inject(navigateToEntitySettingsInjectable);
     const notificationsStore = di.inject(notificationsStoreInjectable);
-
+    const getClusterById = di.inject(getClusterByIdInjectable);
     const notificationLastDisplayedAt = new Map<string, number>();
     const intervalBetweenNotifications = 1000 * 60; // 60s
 
@@ -27,7 +28,7 @@ const listNamespacesForbiddenHandlerInjectable = getInjectable({
       ...[clusterId]: ListNamespaceForbiddenArgs
     ): void => {
       const lastDisplayedAt = notificationLastDisplayedAt.get(clusterId);
-      const now = Date.now();
+      const now = getMillisecondsFromUnixEpoch();
 
       if (
         typeof lastDisplayedAt !== "number" ||
@@ -52,7 +53,7 @@ const listNamespacesForbiddenHandlerInjectable = getInjectable({
             <b>Add Accessible Namespaces</b>
             <p>
               {"Cluster "}
-              <b>{ClusterStore.getInstance().getById(clusterId)?.name ?? "<unknown cluster>"}</b>
+              <b>{getClusterById(clusterId)?.name ?? "<unknown cluster>"}</b>
               {" does not have permissions to list namespaces. Please add the namespaces you have access to."}
             </p>
             <div className="flex gaps row align-left box grow">
@@ -74,7 +75,7 @@ const listNamespacesForbiddenHandlerInjectable = getInjectable({
        * Set the time when the notification is closed as well so that there is at
        * least a minute between closing the notification as seeing it again
        */
-          onClose: () => notificationLastDisplayedAt.set(clusterId, Date.now()),
+          onClose: () => notificationLastDisplayedAt.set(clusterId, getMillisecondsFromUnixEpoch()),
         },
       );
     };

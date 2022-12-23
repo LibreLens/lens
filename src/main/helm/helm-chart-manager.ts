@@ -3,40 +3,34 @@
  * Licensed under MIT License. See LICENSE in root directory for more information.
  */
 
-import fs from "fs";
 import * as yaml from "js-yaml";
-import logger from "../logger";
-import type { RepoHelmChartList } from "../../common/k8s-api/endpoints/helm-charts.api";
-import { iter, put, sortCharts } from "../../common/utils";
-import { execHelm } from "./exec";
-import type { SetRequired } from "type-fest";
-import { assert } from "console";
+import { iter, put, sortBySemverVersion } from "../../common/utils";
 import type { HelmRepo } from "../../common/helm/helm-repo";
-
-interface ChartCacheEntry {
-  data: string; // serialized JSON
-  mtimeMs: number;
-}
+import type { HelmChartManagerCache } from "./helm-chart-manager-cache.injectable";
+import type { Logger } from "../../common/logger";
+import type { RepoHelmChartList } from "../../common/k8s-api/endpoints/helm-charts.api/request-charts.injectable";
+import type { ExecHelm } from "./exec-helm/exec-helm.injectable";
+import type { ReadFile } from "../../common/fs/read-file.injectable";
+import type { Stat } from "../../common/fs/stat.injectable";
 
 export interface HelmCacheFile {
   apiVersion: string;
   entries: RepoHelmChartList;
 }
 
+interface Dependencies {
+  readonly cache: HelmChartManagerCache;
+  readonly logger: Logger;
+  execHelm: ExecHelm;
+  readFile: ReadFile;
+  stat: Stat;
+}
+
 export class HelmChartManager {
-  static readonly #cache = new Map<string, ChartCacheEntry>();
-
-  protected readonly repo: SetRequired<HelmRepo, "cacheFilePath">;
-
-  private constructor(repo: HelmRepo) {
-    assert(repo.cacheFilePath, "CacheFilePath must be provided on the helm repo");
-
-    this.repo = repo as SetRequired<HelmRepo, "cacheFilePath">;
-  }
-
-  static forRepo(repo: HelmRepo) {
-    return new this(repo);
-  }
+  constructor(
+    private readonly dependencies: Dependencies,
+    protected readonly repo: HelmRepo,
+  ) {}
 
   public async chartVersions(name: string) {
     const charts = await this.charts();
@@ -48,7 +42,7 @@ export class HelmChartManager {
     try {
       return await this.cachedYaml();
     } catch(error) {
-      logger.error("HELM-CHART-MANAGER]: failed to list charts", { error });
+      this.dependencies.logger.error("HELM-CHART-MANAGER]: failed to list charts", { error });
 
       return {};
     }
@@ -61,7 +55,7 @@ export class HelmChartManager {
       args.push("--version", version);
     }
 
-    return execHelm(args);
+    return this.dependencies.execHelm(args);
   }
 
   public async getReadme(name: string, version?: string) {
@@ -73,8 +67,8 @@ export class HelmChartManager {
   }
 
   protected async updateYamlCache() {
-    const cacheFile = await fs.promises.readFile(this.repo.cacheFilePath, "utf-8");
-    const cacheFileStats = await fs.promises.stat(this.repo.cacheFilePath);
+    const cacheFile = await this.dependencies.readFile(this.repo.cacheFilePath);
+    const cacheFileStats = await this.dependencies.stat(this.repo.cacheFilePath);
     const data = yaml.load(cacheFile) as string | number | HelmCacheFile;
 
     if (!data || typeof data !== "object" || typeof data.entries !== "object") {
@@ -84,7 +78,7 @@ export class HelmChartManager {
     const normalized = normalizeHelmCharts(this.repo.name, data.entries);
 
     return put(
-      HelmChartManager.#cache,
+      this.dependencies.cache,
       this.repo.name,
       {
         data: JSON.stringify(normalized),
@@ -94,12 +88,12 @@ export class HelmChartManager {
   }
 
   protected async cachedYaml(): Promise<RepoHelmChartList> {
-    let cacheEntry = HelmChartManager.#cache.get(this.repo.name);
+    let cacheEntry = this.dependencies.cache.get(this.repo.name);
 
     if (!cacheEntry) {
       cacheEntry = await this.updateYamlCache();
     } else {
-      const newStats = await fs.promises.stat(this.repo.cacheFilePath);
+      const newStats = await this.dependencies.stat(this.repo.cacheFilePath);
 
       if (cacheEntry.mtimeMs < newStats.mtimeMs) {
         cacheEntry = await this.updateYamlCache();
@@ -123,7 +117,7 @@ function normalizeHelmCharts(repoName: string, entries: RepoHelmChartList): Repo
         Object.entries(entries),
         ([name, charts]) => [
           name,
-          sortCharts(
+          sortBySemverVersion(
             charts.map(chart => ({
               ...chart,
               created: Date.parse(chart.created).toString(),

@@ -8,6 +8,8 @@ import { createContainer, getInjectable, getInjectionToken } from "@ogre-tools/i
 import type { Runnable } from "./run-many-for";
 import { runManyFor } from "./run-many-for";
 import { getPromiseStatus } from "../test-utils/get-promise-status";
+import { runInAction } from "mobx";
+import { flushPromises } from "../test-utils/flush-promises";
 
 describe("runManyFor", () => {
   describe("given no hierarchy, when running many", () => {
@@ -25,13 +27,19 @@ describe("runManyFor", () => {
 
       const someInjectable = getInjectable({
         id: "some-injectable",
-        instantiate: () => ({ run: () => runMock("some-call") }),
+        instantiate: () => ({
+          id: "some-injectable",
+          run: () => runMock("some-call"),
+        }),
         injectionToken: someInjectionTokenForRunnables,
       });
 
       const someOtherInjectable = getInjectable({
         id: "some-other-injectable",
-        instantiate: () => ({ run: () => runMock("some-other-call") }),
+        instantiate: () => ({
+          id: "some-other-injectable",
+          run: () => runMock("some-other-call"),
+        }),
         injectionToken: someInjectionTokenForRunnables,
       });
 
@@ -79,6 +87,7 @@ describe("runManyFor", () => {
         id: "some-injectable-1",
 
         instantiate: (di) => ({
+          id: "some-injectable-1",
           run: () => runMock("third-level-run"),
           runAfter: di.inject(someInjectable2),
         }),
@@ -90,6 +99,7 @@ describe("runManyFor", () => {
         id: "some-injectable-2",
 
         instantiate: (di) => ({
+          id: "some-injectable-2",
           run: () => runMock("second-level-run"),
           runAfter: di.inject(someInjectable3),
         }),
@@ -99,7 +109,10 @@ describe("runManyFor", () => {
 
       const someInjectable3 = getInjectable({
         id: "some-injectable-3",
-        instantiate: () => ({ run: () => runMock("first-level-run") }),
+        instantiate: () => ({
+          id: "some-injectable-3",
+          run: () => runMock("first-level-run"),
+        }),
         injectionToken: someInjectionTokenForRunnables,
       });
 
@@ -186,6 +199,7 @@ describe("runManyFor", () => {
       id: "some-runnable-1",
 
       instantiate: (di) => ({
+        id: "some-runnable-1",
         run: () => runMock("some-runnable-1"),
         runAfter: di.inject(someOtherInjectable),
       }),
@@ -197,6 +211,7 @@ describe("runManyFor", () => {
       id: "some-runnable-2",
 
       instantiate: () => ({
+        id: "some-runnable-2",
         run: () => runMock("some-runnable-2"),
       }),
 
@@ -210,7 +225,68 @@ describe("runManyFor", () => {
     );
 
     return expect(() => runMany()).rejects.toThrow(
-      "Tried to run runnable after other runnable which does not same injection token.",
+      /Runnable "some-runnable-1" is unreachable for injection token "some-injection-token": run afters "some-runnable-2" are a part of different injection tokens./,
+    );
+  });
+
+  it("given partially incorrect hierarchy, when running runnables, throws", () => {
+    const rootDi = createContainer("irrelevant");
+
+    const runMock = asyncFn<(...args: unknown[]) => void>();
+
+    const someInjectionToken = getInjectionToken<Runnable>({
+      id: "some-injection-token",
+    });
+
+    const someOtherInjectionToken = getInjectionToken<Runnable>({
+      id: "some-other-injection-token",
+    });
+
+    const someInjectable = getInjectable({
+      id: "some-runnable-1",
+
+      instantiate: (di) => ({
+        id: "some-runnable-1",
+        run: () => runMock("some-runnable-1"),
+        runAfter: [
+          di.inject(someOtherInjectable),
+          di.inject(someSecondInjectable),
+        ],
+      }),
+
+      injectionToken: someInjectionToken,
+    });
+
+    const someSecondInjectable = getInjectable({
+      id: "some-runnable-2",
+
+      instantiate: () => ({
+        id: "some-runnable-2",
+        run: () => runMock("some-runnable-2"),
+      }),
+
+      injectionToken: someInjectionToken,
+    });
+
+    const someOtherInjectable = getInjectable({
+      id: "some-runnable-3",
+
+      instantiate: () => ({
+        id: "some-runnable-3",
+        run: () => runMock("some-runnable-3"),
+      }),
+
+      injectionToken: someOtherInjectionToken,
+    });
+
+    rootDi.register(someInjectable, someOtherInjectable, someSecondInjectable);
+
+    const runMany = runManyFor(rootDi)(
+      someInjectionToken,
+    );
+
+    return expect(() => runMany()).rejects.toThrow(
+      /Runnable "some-runnable-3" is not part of the injection token "some-injection-token"/,
     );
   });
 
@@ -232,6 +308,7 @@ describe("runManyFor", () => {
         id: "some-runnable-1",
 
         instantiate: () => ({
+          id: "some-runnable-1",
           run: (parameter) => runMock("run-of-some-runnable-1", parameter),
         }),
 
@@ -242,6 +319,7 @@ describe("runManyFor", () => {
         id: "some-runnable-2",
 
         instantiate: () => ({
+          id: "some-runnable-2",
           run: (parameter) => runMock("run-of-some-runnable-2", parameter),
         }),
 
@@ -262,6 +340,321 @@ describe("runManyFor", () => {
         ["run-of-some-runnable-1", "some-parameter"],
         ["run-of-some-runnable-2", "some-parameter"],
       ]);
+    });
+  });
+
+  describe("given multiple runAfters", () => {
+    let runMock: AsyncFnMock<(...args: unknown[]) => void>;
+    let finishingPromise: Promise<void>;
+
+    beforeEach(async () => {
+      const rootDi = createContainer("irrelevant");
+
+      runMock = asyncFn<(...args: unknown[]) => void>();
+
+      const someInjectionToken = getInjectionToken<Runnable>({
+        id: "some-injection-token",
+      });
+
+      const runnableOneInjectable = getInjectable({
+        id: "runnable-1",
+        instantiate: () => ({
+          id: "runnable-1",
+          run: () => runMock("runnable-1"),
+        }),
+        injectionToken: someInjectionToken,
+      });
+
+      const runnableTwoInjectable = getInjectable({
+        id: "runnable-2",
+        instantiate: () => ({
+          id: "runnable-2",
+          run: () => runMock("runnable-2"),
+          runAfter: [], // shouldn't block being called
+        }),
+        injectionToken: someInjectionToken,
+      });
+
+      const runnableThreeInjectable = getInjectable({
+        id: "runnable-3",
+        instantiate: (di) => ({
+          id: "runnable-3",
+          run: () => runMock("runnable-3"),
+          runAfter: di.inject(runnableOneInjectable),
+        }),
+        injectionToken: someInjectionToken,
+      });
+
+      const runnableFourInjectable = getInjectable({
+        id: "runnable-4",
+        instantiate: (di) => ({
+          id: "runnable-4",
+          run: () => runMock("runnable-4"),
+          runAfter: [di.inject(runnableThreeInjectable)], // should be the same as an single item
+        }),
+        injectionToken: someInjectionToken,
+      });
+
+      const runnableFiveInjectable = getInjectable({
+        id: "runnable-5",
+        instantiate: (di) => ({
+          id: "runnable-5",
+          run: () => runMock("runnable-5"),
+          runAfter: di.inject(runnableThreeInjectable),
+        }),
+        injectionToken: someInjectionToken,
+      });
+
+      const runnableSixInjectable = getInjectable({
+        id: "runnable-6",
+        instantiate: (di) => ({
+          id: "runnable-6",
+          run: () => runMock("runnable-6"),
+          runAfter: [
+            di.inject(runnableFourInjectable),
+            di.inject(runnableFiveInjectable),
+          ],
+        }),
+        injectionToken: someInjectionToken,
+      });
+
+      const runnableSevenInjectable = getInjectable({
+        id: "runnable-7",
+        instantiate: (di) => ({
+          id: "runnable-7",
+          run: () => runMock("runnable-7"),
+          runAfter: [
+            di.inject(runnableFiveInjectable),
+            di.inject(runnableSixInjectable),
+          ],
+        }),
+        injectionToken: someInjectionToken,
+      });
+
+      runInAction(() => {
+        rootDi.register(
+          runnableOneInjectable,
+          runnableTwoInjectable,
+          runnableThreeInjectable,
+          runnableFourInjectable,
+          runnableFiveInjectable,
+          runnableSixInjectable,
+          runnableSevenInjectable,
+        );
+      });
+
+      const runMany = runManyFor(rootDi);
+      const runSome = runMany(someInjectionToken);
+
+      finishingPromise = runSome();
+
+      await flushPromises();
+    });
+
+    it("should run 'runnable-1'", () => {
+      expect(runMock).toBeCalledWith("runnable-1");
+    });
+
+    it("should run 'runnable-2'", () => {
+      expect(runMock).toBeCalledWith("runnable-2");
+    });
+
+    it("should not run 'runnable-3'", () => {
+      expect(runMock).not.toBeCalledWith("runnable-3");
+    });
+
+    describe("when 'runnable-1' resolves", () => {
+      beforeEach(async () => {
+        await runMock.resolveSpecific(["runnable-1"]);
+      });
+
+      it("should run 'runnable-3'", () => {
+        expect(runMock).toBeCalledWith("runnable-3");
+      });
+
+      describe("when 'runnable-2' resolves", () => {
+        beforeEach(async () => {
+          await runMock.resolveSpecific(["runnable-2"]);
+        });
+
+        it("shouldn't call any more runnables", () => {
+          expect(runMock).toBeCalledTimes(3);
+        });
+      });
+
+      describe("when 'runnable-3' resolves", () => {
+        beforeEach(async () => {
+          await runMock.resolveSpecific(["runnable-3"]);
+        });
+
+        it("should run 'runnable-4'", () => {
+          expect(runMock).toBeCalledWith("runnable-4");
+        });
+
+        it("should run 'runnable-5'", () => {
+          expect(runMock).toBeCalledWith("runnable-5");
+        });
+
+        describe("when 'runnable-2' resolves", () => {
+          beforeEach(async () => {
+            await runMock.resolveSpecific(["runnable-2"]);
+          });
+
+          it("shouldn't call any more runnables", () => {
+            expect(runMock).toBeCalledTimes(5);
+          });
+        });
+
+        describe("when 'runnable-4' resolves", () => {
+          beforeEach(async () => {
+            await runMock.resolveSpecific(["runnable-4"]);
+          });
+
+          it("shouldn't call any more runnables", () => {
+            expect(runMock).toBeCalledTimes(5);
+          });
+
+          describe("when 'runnable-2' resolves", () => {
+            beforeEach(async () => {
+              await runMock.resolveSpecific(["runnable-2"]);
+            });
+
+            it("shouldn't call any more runnables", () => {
+              expect(runMock).toBeCalledTimes(5);
+            });
+          });
+
+          describe("when 'runnable-5' resolves", () => {
+            beforeEach(async () => {
+              await runMock.resolveSpecific(["runnable-5"]);
+            });
+
+            it("should run 'runnable-6'", () => {
+              expect(runMock).toBeCalledWith("runnable-6");
+            });
+
+            describe("when 'runnable-2' resolves", () => {
+              beforeEach(async () => {
+                await runMock.resolveSpecific(["runnable-2"]);
+              });
+
+              it("shouldn't call any more runnables", () => {
+                expect(runMock).toBeCalledTimes(6);
+              });
+            });
+
+            describe("when 'runnable-6' resolves", () => {
+              beforeEach(async () => {
+                await runMock.resolveSpecific(["runnable-6"]);
+              });
+
+              it("should run 'runnable-7'", () => {
+                expect(runMock).toBeCalledWith("runnable-7");
+              });
+
+              describe("when 'runnable-2' resolves", () => {
+                beforeEach(async () => {
+                  await runMock.resolveSpecific(["runnable-2"]);
+                });
+
+                it("shouldn't call any more runnables", () => {
+                  expect(runMock).toBeCalledTimes(7);
+                });
+
+                describe("when 'runnable-7' resolves", () => {
+                  beforeEach(async () => {
+                    await runMock.resolveSpecific(["runnable-7"]);
+                  });
+
+                  it("should resolve the runMany promise call", async () => {
+                    await finishingPromise;
+                  });
+                });
+              });
+            });
+          });
+        });
+
+        describe("when 'runnable-5' resolves", () => {
+          beforeEach(async () => {
+            await runMock.resolveSpecific(["runnable-5"]);
+          });
+
+          it("shouldn't call any more runnables", () => {
+            expect(runMock).toBeCalledTimes(5);
+          });
+
+          describe("when 'runnable-2' resolves", () => {
+            beforeEach(async () => {
+              await runMock.resolveSpecific(["runnable-2"]);
+            });
+
+            it("shouldn't call any more runnables", () => {
+              expect(runMock).toBeCalledTimes(5);
+            });
+          });
+
+          describe("when 'runnable-4' resolves", () => {
+            beforeEach(async () => {
+              await runMock.resolveSpecific(["runnable-4"]);
+            });
+
+            it("should run 'runnable-6'", () => {
+              expect(runMock).toBeCalledWith("runnable-6");
+            });
+
+            describe("when 'runnable-2' resolves", () => {
+              beforeEach(async () => {
+                await runMock.resolveSpecific(["runnable-2"]);
+              });
+
+              it("shouldn't call any more runnables", () => {
+                expect(runMock).toBeCalledTimes(6);
+              });
+            });
+
+            describe("when 'runnable-6' resolves", () => {
+              beforeEach(async () => {
+                await runMock.resolveSpecific(["runnable-6"]);
+              });
+
+              it("should run 'runnable-7'", () => {
+                expect(runMock).toBeCalledWith("runnable-7");
+              });
+
+              describe("when 'runnable-2' resolves", () => {
+                beforeEach(async () => {
+                  await runMock.resolveSpecific(["runnable-2"]);
+                });
+
+                it("shouldn't call any more runnables", () => {
+                  expect(runMock).toBeCalledTimes(7);
+                });
+
+                describe("when 'runnable-7' resolves", () => {
+                  beforeEach(async () => {
+                    await runMock.resolveSpecific(["runnable-7"]);
+                  });
+
+                  it("should resolve the runMany promise call", async () => {
+                    await finishingPromise;
+                  });
+                });
+              });
+            });
+          });
+        });
+      });
+    });
+
+    describe("when 'runnable-2' resolves", () => {
+      beforeEach(async () => {
+        await runMock.resolveSpecific(["runnable-2"]);
+      });
+
+      it("shouldn't call any more runnables", () => {
+        expect(runMock).toBeCalledTimes(2);
+      });
     });
   });
 });

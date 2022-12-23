@@ -6,50 +6,37 @@
 import "./volume-claim-details.scss";
 
 import React, { Fragment } from "react";
-import { makeObservable, observable, reaction } from "mobx";
-import { disposeOnUnmount, observer } from "mobx-react";
+import { observer } from "mobx-react";
 import { DrawerItem, DrawerTitle } from "../drawer";
 import { Badge } from "../badge";
-import { podStore } from "../+workloads-pods/legacy-store";
 import { Link } from "react-router-dom";
-import { ResourceMetrics } from "../resource-metrics";
-import { VolumeClaimDiskChart } from "./volume-claim-disk-chart";
 import type { KubeObjectDetailsProps } from "../kube-object-details";
-import { getMetricsForPvc, type PersistentVolumeClaimMetricData, PersistentVolumeClaim } from "../../../common/k8s-api/endpoints";
-import { getActiveClusterEntity } from "../../api/catalog/entity/legacy-globals";
-import { ClusterMetricsResourceType } from "../../../common/cluster-types";
-import { KubeObjectMeta } from "../kube-object-meta";
-import { getDetailsUrl } from "../kube-detail-params";
-import logger from "../../../common/logger";
+import type { StorageClassApi } from "../../../common/k8s-api/endpoints";
+import { PersistentVolumeClaim } from "../../../common/k8s-api/endpoints";
+import type { Logger } from "../../../common/logger";
+import { withInjectables } from "@ogre-tools/injectable-react";
+import type { GetDetailsUrl } from "../kube-detail-params/get-details-url.injectable";
+import type { PodStore } from "../+workloads-pods/store";
+import getDetailsUrlInjectable from "../kube-detail-params/get-details-url.injectable";
+import podStoreInjectable from "../+workloads-pods/store.injectable";
+import { stopPropagation } from "../../../renderer/utils";
+import storageClassApiInjectable from "../../../common/k8s-api/endpoints/storage-class.api.injectable";
+import loggerInjectable from "../../../common/logger.injectable";
 
 export interface PersistentVolumeClaimDetailsProps extends KubeObjectDetailsProps<PersistentVolumeClaim> {
 }
 
+interface Dependencies {
+  getDetailsUrl: GetDetailsUrl;
+  podStore: PodStore;
+  storageClassApi: StorageClassApi;
+  logger: Logger;
+}
+
 @observer
-export class PersistentVolumeClaimDetails extends React.Component<PersistentVolumeClaimDetailsProps> {
-  @observable metrics: PersistentVolumeClaimMetricData | null = null;
-
-  constructor(props: PersistentVolumeClaimDetailsProps) {
-    super(props);
-    makeObservable(this);
-  }
-
-  componentDidMount() {
-    disposeOnUnmount(this, [
-      reaction(() => this.props.object, () => {
-        this.metrics = null;
-      }),
-    ]);
-  }
-
-  loadMetrics = async () => {
-    const { object: volumeClaim } = this.props;
-
-    this.metrics = await getMetricsForPvc(volumeClaim);
-  };
-
+class NonInjectedPersistentVolumeClaimDetails extends React.Component<PersistentVolumeClaimDetailsProps & Dependencies> {
   render() {
-    const { object: volumeClaim } = this.props;
+    const { object: volumeClaim, podStore, getDetailsUrl, storageClassApi, logger } = this.props;
 
     if (!volumeClaim) {
       return null;
@@ -63,28 +50,24 @@ export class PersistentVolumeClaimDetails extends React.Component<PersistentVolu
 
     const { storageClassName, accessModes } = volumeClaim.spec;
     const pods = volumeClaim.getPods(podStore.items);
-    const isMetricHidden = getActiveClusterEntity()?.isMetricHidden(ClusterMetricsResourceType.VolumeClaim);
+
+    const storageClassDetailsUrl = getDetailsUrl(storageClassApi.formatUrlForNotListing({
+      name: storageClassName,
+    }));
 
     return (
       <div className="PersistentVolumeClaimDetails">
-        {!isMetricHidden && (
-          <ResourceMetrics
-            loader={this.loadMetrics}
-            tabs={[
-              "Disk",
-            ]}
-            object={volumeClaim}
-            metrics={this.metrics}
-          >
-            <VolumeClaimDiskChart/>
-          </ResourceMetrics>
-        )}
-        <KubeObjectMeta object={volumeClaim}/>
         <DrawerItem name="Access Modes">
           {accessModes?.join(", ")}
         </DrawerItem>
         <DrawerItem name="Storage Class Name">
-          {storageClassName}
+          <Link
+            key="link"
+            to={storageClassDetailsUrl}
+            onClick={stopPropagation}
+          >
+            {storageClassName}
+          </Link>
         </DrawerItem>
         <DrawerItem name="Storage">
           {volumeClaim.getStorage()}
@@ -103,7 +86,7 @@ export class PersistentVolumeClaimDetails extends React.Component<PersistentVolu
         <DrawerTitle>Selector</DrawerTitle>
 
         <DrawerItem name="Match Labels" labelsOnly>
-          {volumeClaim.getMatchLabels().map(label => <Badge key={label} label={label}/>)}
+          {volumeClaim.getMatchLabels().map(label => <Badge key={label} label={label} />)}
         </DrawerItem>
 
         <DrawerItem name="Match Expressions">
@@ -119,3 +102,13 @@ export class PersistentVolumeClaimDetails extends React.Component<PersistentVolu
     );
   }
 }
+
+export const PersistentVolumeClaimDetails = withInjectables<Dependencies, PersistentVolumeClaimDetailsProps>(NonInjectedPersistentVolumeClaimDetails, {
+  getProps: (di, props) => ({
+    ...props,
+    getDetailsUrl: di.inject(getDetailsUrlInjectable),
+    podStore: di.inject(podStoreInjectable),
+    storageClassApi: di.inject(storageClassApiInjectable),
+    logger: di.inject(loggerInjectable),
+  }),
+});

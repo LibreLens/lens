@@ -3,23 +3,22 @@
  * Licensed under MIT License. See LICENSE in root directory for more information.
  */
 import { getInjectable } from "@ogre-tools/injectable";
-import { beforeFrameStartsInjectionToken } from "../../../before-frame-starts/before-frame-starts-injection-token";
-import listeningOfChannelsInjectable from "../../../../common/utils/channel/listening-of-channels.injectable";
+import { beforeFrameStartsSecondInjectionToken } from "../../../before-frame-starts/tokens";
+import listeningOnMessageChannelsInjectable from "../../../../common/utils/channel/listening-on-message-channels.injectable";
 
 const startListeningOfChannelsInjectable = getInjectable({
   id: "start-listening-of-channels-renderer",
 
-  instantiate: (di) => {
-    const listeningOfChannels = di.inject(listeningOfChannelsInjectable);
+  instantiate: (di) => ({
+    id: "start-listening-of-channels-renderer",
+    run: () => {
+      const listeningOfChannels = di.inject(listeningOnMessageChannelsInjectable);
 
-    return {
-      run: async () => {
-        await listeningOfChannels.start();
-      },
-    };
-  },
+      listeningOfChannels.start();
+    },
+  }),
 
-  injectionToken: beforeFrameStartsInjectionToken,
+  injectionToken: beforeFrameStartsSecondInjectionToken,
 });
 
 export default startListeningOfChannelsInjectable;

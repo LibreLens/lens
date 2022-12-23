@@ -9,6 +9,11 @@ import { createExtensionInstanceInjectionToken } from "./create-extension-instan
 import extensionInstancesInjectable from "./extension-instances.injectable";
 import type { LensExtension } from "../lens-extension";
 import extensionInjectable from "./extension/extension.injectable";
+import loggerInjectable from "../../common/logger.injectable";
+import joinPathsInjectable from "../../common/path/join-paths.injectable";
+import getDirnameOfPathInjectable from "../../common/path/get-dirname.injectable";
+import { bundledExtensionInjectionToken } from "../extension-discovery/bundled-extension-token";
+import { extensionEntryPointNameInjectionToken } from "./entry-point-name";
 
 const extensionLoaderInjectable = getInjectable({
   id: "extension-loader",
@@ -18,6 +23,11 @@ const extensionLoaderInjectable = getInjectable({
     createExtensionInstance: di.inject(createExtensionInstanceInjectionToken),
     extensionInstances: di.inject(extensionInstancesInjectable),
     getExtension: (instance: LensExtension) => di.inject(extensionInjectable, instance),
+    bundledExtensions: di.injectMany(bundledExtensionInjectionToken),
+    extensionEntryPointName: di.inject(extensionEntryPointNameInjectionToken),
+    logger: di.inject(loggerInjectable),
+    joinPaths: di.inject(joinPathsInjectable),
+    getDirnameOfPath: di.inject(getDirnameOfPathInjectable),
   }),
 });
 

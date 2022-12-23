@@ -3,16 +3,18 @@
  * Licensed under MIT License. See LICENSE in root directory for more information.
  */
 
-import type { MetricData } from "./metrics.api";
-import { metricsApi } from "./metrics.api";
 import type { DerivedKubeApiOptions, IgnoredKubeApiOptions, ResourceDescriptor } from "../kube-api";
 import { KubeApi } from "../kube-api";
 import type { RequireExactlyOne } from "type-fest";
-import type { KubeObjectMetadata, LocalObjectReference, Affinity, Toleration, LabelSelector, NamespaceScopedMetadata } from "../kube-object";
+import type { KubeObjectMetadata, LocalObjectReference, Affinity, Toleration, NamespaceScopedMetadata } from "../kube-object";
 import type { SecretReference } from "./secret.api";
 import type { PersistentVolumeClaimSpec } from "./persistent-volume-claim.api";
 import { KubeObject } from "../kube-object";
 import { isDefined } from "../../utils";
+import type { PodSecurityContext } from "./types/pod-security-context";
+import type { Probe } from "./types/probe";
+import type { Container } from "./types/container";
+import type { ObjectFieldSelector, ResourceFieldSelector } from "./types";
 
 export class PodApi extends KubeApi<Pod> {
   constructor(opts: DerivedKubeApiOptions & IgnoredKubeApiOptions = {}) {
@@ -27,41 +29,6 @@ export class PodApi extends KubeApi<Pod> {
 
     return this.request.get(path, { query });
   }
-}
-
-export function getMetricsForPods(pods: Pod[], namespace: string, selector = "pod, namespace"): Promise<PodMetricData> {
-  const podSelector = pods.map(pod => pod.getName()).join("|");
-  const opts = { category: "pods", pods: podSelector, namespace, selector };
-
-  return metricsApi.getMetrics({
-    cpuUsage: opts,
-    cpuRequests: opts,
-    cpuLimits: opts,
-    memoryUsage: opts,
-    memoryRequests: opts,
-    memoryLimits: opts,
-    fsUsage: opts,
-    fsWrites: opts,
-    fsReads: opts,
-    networkReceive: opts,
-    networkTransmit: opts,
-  }, {
-    namespace,
-  });
-}
-
-export interface PodMetricData extends Partial<Record<string, MetricData>> {
-  cpuUsage: MetricData;
-  memoryUsage: MetricData;
-  fsUsage: MetricData;
-  fsWrites: MetricData;
-  fsReads: MetricData;
-  networkReceive: MetricData;
-  networkTransmit: MetricData;
-  cpuRequests?: MetricData;
-  cpuLimits?: MetricData;
-  memoryRequests?: MetricData;
-  memoryLimits?: MetricData;
 }
 
 // Reference: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.19/#read-log-pod-v1-core
@@ -81,93 +48,6 @@ export enum PodStatusPhase {
   RUNNING = "Running",
   SUCCEEDED = "Succeeded",
   EVICTED = "Evicted",
-}
-
-export interface ContainerPort {
-  containerPort: number;
-  hostIP?: string;
-  hostPort?: number;
-  name?: string;
-  protocol?: "UDP" | "TCP" | "SCTP";
-}
-
-export interface VolumeMount {
-  name: string;
-  readOnly?: boolean;
-  mountPath: string;
-  mountPropagation?: string;
-  subPath?: string;
-  subPathExpr?: string;
-}
-
-export interface PodContainer extends Partial<Record<PodContainerProbe, IContainerProbe>> {
-  name: string;
-  image: string;
-  command?: string[];
-  args?: string[];
-  ports?: ContainerPort[];
-  resources?: {
-    limits?: {
-      cpu: string;
-      memory: string;
-    };
-    requests?: {
-      cpu: string;
-      memory: string;
-    };
-  };
-  terminationMessagePath?: string;
-  terminationMessagePolicy?: string;
-  env?: {
-    name: string;
-    value?: string;
-    valueFrom?: {
-      fieldRef?: {
-        apiVersion: string;
-        fieldPath: string;
-      };
-      secretKeyRef?: {
-        key: string;
-        name: string;
-      };
-      configMapKeyRef?: {
-        key: string;
-        name: string;
-      };
-    };
-  }[];
-  envFrom?: {
-    configMapRef?: LocalObjectReference;
-    secretRef?: LocalObjectReference;
-  }[];
-  volumeMounts?: VolumeMount[];
-  imagePullPolicy?: string;
-}
-
-export type PodContainerProbe = "livenessProbe" | "readinessProbe" | "startupProbe";
-
-interface IContainerProbe {
-  httpGet?: {
-    path?: string;
-
-    /**
-     * either a port number or an IANA_SVC_NAME string referring to a port defined in the container
-     */
-    port: number | string;
-    scheme: string;
-    host?: string;
-  };
-  exec?: {
-    command: string[];
-  };
-  tcpSocket?: {
-    port: number;
-  };
-  initialDelaySeconds?: number;
-  timeoutSeconds?: number;
-  periodSeconds?: number;
-  successThreshold?: number;
-  failureThreshold?: number;
 }
 
 export interface ContainerStateRunning {
@@ -459,17 +339,6 @@ export interface ConfigMapProjection {
   optional?: boolean;
 }
 
-export interface ObjectFieldSelector {
-  fieldPath: string;
-  apiVersion?: string;
-}
-
-export interface ResourceFieldSelector {
-  resource: string;
-  containerName?: string;
-  divisor?: string;
-}
-
 export interface DownwardAPIVolumeFile {
   path: string;
   fieldRef?: ObjectFieldSelector;
@@ -674,41 +543,9 @@ export interface HostAlias {
   hostnames: string[];
 }
 
-export interface SELinuxOptions {
-  level?: string;
-  role?: string;
-  type?: string;
-  user?: string;
-}
-
-export interface SeccompProfile {
-  localhostProfile?: string;
-  type: string;
-}
-
 export interface Sysctl {
   name: string;
   value: string;
-}
-
-export interface WindowsSecurityContextOptions {
-  labelSelector?: LabelSelector;
-  maxSkew: number;
-  topologyKey: string;
-  whenUnsatisfiable: string;
-}
-
-export interface PodSecurityContext {
-  fsGroup?: number;
-  fsGroupChangePolicy?: string;
-  runAsGroup?: number;
-  runAsNonRoot?: boolean;
-  runAsUser?: number;
-  seLinuxOptions?: SELinuxOptions;
-  seccompProfile?: SeccompProfile;
-  supplementalGroups?: number[];
-  sysctls?: Sysctl;
-  windowsOptions?: WindowsSecurityContextOptions;
 }
 
 export interface TopologySpreadConstraint {
@@ -719,7 +556,7 @@ export interface PodSpec {
   activeDeadlineSeconds?: number;
   affinity?: Affinity;
   automountServiceAccountToken?: boolean;
-  containers?: PodContainer[];
+  containers?: Container[];
   dnsPolicy?: string;
   enableServiceLinks?: boolean;
   ephemeralContainers?: unknown[];
@@ -729,7 +566,7 @@ export interface PodSpec {
   hostNetwork?: boolean;
   hostPID?: boolean;
   imagePullSecrets?: LocalObjectReference[];
-  initContainers?: PodContainer[];
+  initContainers?: Container[];
   nodeName?: string;
   nodeSelector?: Partial<Record<string, string>>;
   overhead?: Partial<Record<string, string>>;
@@ -840,6 +677,14 @@ export class Pod extends KubeObject<
     return this.spec?.priorityClassName || "";
   }
 
+  getRuntimeClassName() {
+    return this.spec?.runtimeClassName || "";
+  }
+
+  getServiceAccountName() {
+    return this.spec?.serviceAccountName || "";
+  }
+
   getStatus(): PodStatusPhase {
     const phase = this.getStatusPhase();
     const reason = this.getReason();
@@ -927,44 +772,45 @@ export class Pod extends KubeObject<
     return this.getStatusPhase() !== "Running";
   }
 
-  getLivenessProbe(container: PodContainer) {
-    return this.getProbe(container, "livenessProbe");
+  getLivenessProbe(container: Container) {
+    return this.getProbe(container, container.livenessProbe);
   }
 
-  getReadinessProbe(container: PodContainer) {
-    return this.getProbe(container, "readinessProbe");
+  getReadinessProbe(container: Container) {
+    return this.getProbe(container, container.readinessProbe);
   }
 
-  getStartupProbe(container: PodContainer) {
-    return this.getProbe(container, "startupProbe");
+  getStartupProbe(container: Container) {
+    return this.getProbe(container, container.startupProbe);
   }
 
-  private getProbe(container: PodContainer, field: PodContainerProbe): string[] {
-    const probe: string[] = [];
-    const probeData = container[field];
+  private getProbe(container: Container, probe: Probe | undefined): string[] {
+    const probeItems: string[] = [];
 
-    if (!probeData) {
-      return probe;
+    if (!probe) {
+      return probeItems;
     }
 
     const {
-      httpGet, exec, tcpSocket,
+      httpGet,
+      exec,
+      tcpSocket,
       initialDelaySeconds = 0,
       timeoutSeconds = 0,
       periodSeconds = 0,
       successThreshold = 0,
       failureThreshold = 0,
-    } = probeData;
+    } = probe;
 
     // HTTP Request
     if (httpGet) {
-      const { path = "", port, host = "", scheme } = httpGet;
+      const { path = "", port, host = "", scheme = "HTTP" } = httpGet;
       const resolvedPort = typeof port === "number"
         ? port
         // Try and find the port number associated witht the name or fallback to the name itself
         : container.ports?.find(containerPort => containerPort.name === port)?.containerPort || port;
 
-      probe.push(
+      probeItems.push(
         "http-get",
         `${scheme.toLowerCase()}://${host}:${resolvedPort}${path}`,
       );
@@ -972,15 +818,15 @@ export class Pod extends KubeObject<
 
     // Command
     if (exec?.command) {
-      probe.push(`exec [${exec.command.join(" ")}]`);
+      probeItems.push(`exec [${exec.command.join(" ")}]`);
     }
 
     // TCP Probe
     if (tcpSocket?.port) {
-      probe.push(`tcp-socket :${tcpSocket.port}`);
+      probeItems.push(`tcp-socket :${tcpSocket.port}`);
     }
 
-    probe.push(
+    probeItems.push(
       `delay=${initialDelaySeconds}s`,
       `timeout=${timeoutSeconds}s`,
       `period=${periodSeconds}s`,
@@ -988,7 +834,7 @@ export class Pod extends KubeObject<
       `#failure=${failureThreshold}`,
     );
 
-    return probe;
+    return probeItems;
   }
 
   getNodeName(): string | undefined {

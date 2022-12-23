@@ -14,11 +14,14 @@ import { minikubeReady } from "../helpers/minikube";
 import type { Frame, Page } from "playwright";
 import { groupBy, toPairs } from "lodash/fp";
 import { pipeline } from "@ogre-tools/fp";
+import { describeIf } from "../../src/test-utils/skippers";
 
 const TEST_NAMESPACE = "integration-tests";
 
-utils.describeIf(minikubeReady(TEST_NAMESPACE))("Minikube based tests", () => {
-  let window: Page, cleanup: () => Promise<void>, frame: Frame;
+describeIf(minikubeReady(TEST_NAMESPACE))("Minikube based tests", () => {
+  let window: Page;
+  let cleanup: undefined | (() => Promise<void>);
+  let frame: Frame;
 
   beforeEach(async () => {
     ({ window, cleanup } = await utils.start());
@@ -28,7 +31,7 @@ utils.describeIf(minikubeReady(TEST_NAMESPACE))("Minikube based tests", () => {
   }, 10 * 60 * 1000);
 
   afterEach(async () => {
-    await cleanup();
+    await cleanup?.();
   }, 10 * 60 * 1000);
 
   it("shows cluster context menu in sidebar", async () => {
@@ -70,60 +73,6 @@ utils.describeIf(minikubeReady(TEST_NAMESPACE))("Minikube based tests", () => {
       }
     },
 
-    10 * 60 * 1000,
-  );
-
-  it(
-    "show logs and highlight the log search entries",
-    async () => {
-      await navigateToPods(frame);
-
-      const namespacesSelector = await frame.waitForSelector(
-        ".NamespaceSelect",
-      );
-
-      await namespacesSelector.click();
-      await namespacesSelector.type("kube-system");
-      await namespacesSelector.press("Enter");
-      await namespacesSelector.click();
-
-      const kubeApiServerRow = await frame.waitForSelector(
-        "div.TableCell >> text=kube-apiserver",
-      );
-
-      await kubeApiServerRow.click();
-      await frame.waitForSelector(".Drawer", { state: "visible" });
-
-      const showPodLogsIcon = await frame.waitForSelector(
-        ".Drawer .drawer-title .Icon >> text=subject",
-      );
-
-      showPodLogsIcon.click();
-
-      // Check if controls are available
-      await frame.waitForSelector(".Dock.isOpen");
-      await frame.waitForSelector(".LogList .VirtualList");
-      await frame.waitForSelector(".LogResourceSelector");
-
-      const logSearchInput = await frame.waitForSelector(
-        ".LogSearch .SearchInput input",
-      );
-
-      await logSearchInput.type(":");
-      await frame.waitForSelector(".LogList .list span.active");
-
-      const showTimestampsButton = await frame.waitForSelector(
-        ".LogControls .show-timestamps",
-      );
-
-      await showTimestampsButton.click();
-
-      const showPreviousButton = await frame.waitForSelector(
-        ".LogControls .show-previous",
-      );
-
-      await showPreviousButton.click();
-    },
     10 * 60 * 1000,
   );
 
@@ -391,19 +340,13 @@ const scenarios = [
   {
     expectedSelector: "h5.title",
     parentSidebarItemTestId: "sidebar-item-link-for-user-management",
-    sidebarItemTestId: "sidebar-item-link-for-roles",
-  },
-
-  {
-    expectedSelector: "h5.title",
-    parentSidebarItemTestId: "sidebar-item-link-for-user-management",
     sidebarItemTestId: "sidebar-item-link-for-cluster-roles",
   },
 
   {
     expectedSelector: "h5.title",
     parentSidebarItemTestId: "sidebar-item-link-for-user-management",
-    sidebarItemTestId: "sidebar-item-link-for-role-bindings",
+    sidebarItemTestId: "sidebar-item-link-for-roles",
   },
 
   {
@@ -415,7 +358,7 @@ const scenarios = [
   {
     expectedSelector: "h5.title",
     parentSidebarItemTestId: "sidebar-item-link-for-user-management",
-    sidebarItemTestId: "sidebar-item-link-for-pod-security-policies",
+    sidebarItemTestId: "sidebar-item-link-for-role-bindings",
   },
 
   {

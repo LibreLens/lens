@@ -11,18 +11,16 @@ import { cssNames } from "../../utils";
 import { Badge } from "../badge";
 import { DrawerItem } from "../drawer";
 import type { KubeObjectDetailsProps } from "../kube-object-details";
-import { KubeObjectMeta } from "../kube-object-meta";
 import { Input } from "../input";
 import type { AdditionalPrinterColumnsV1 } from "../../../common/k8s-api/endpoints/custom-resource-definition.api";
 import { CustomResourceDefinition } from "../../../common/k8s-api/endpoints/custom-resource-definition.api";
-import { convertKubectlJsonPathToNodeJsonPath } from "../../utils/jsonPath";
+import { safeJSONPathValue } from "../../utils/jsonPath";
 import type { KubeObjectMetadata, KubeObjectStatus } from "../../../common/k8s-api/kube-object";
 import { KubeObject } from "../../../common/k8s-api/kube-object";
 import logger from "../../../common/logger";
-import { JSONPath } from "@astronautlabs/jsonpath";
 
 export interface CustomResourceDetailsProps extends KubeObjectDetailsProps<KubeObject> {
-  crd: CustomResourceDefinition;
+  crd?: CustomResourceDefinition;
 }
 
 function convertSpecValue(value: unknown): React.ReactNode {
@@ -66,7 +64,7 @@ export class CustomResourceDetails extends React.Component<CustomResourceDetails
   renderAdditionalColumns(resource: KubeObject, columns: AdditionalPrinterColumnsV1[]) {
     return columns.map(({ name, jsonPath }) => (
       <DrawerItem key={name} name={name}>
-        {convertSpecValue(JSONPath.query(resource, convertKubectlJsonPathToNodeJsonPath(jsonPath)))}
+        {convertSpecValue(safeJSONPathValue(resource, jsonPath))}
       </DrawerItem>
     ));
   }
@@ -130,7 +128,6 @@ export class CustomResourceDetails extends React.Component<CustomResourceDetails
 
     return (
       <div className={cssNames("CrdResourceDetails", crd.getResourceKind())}>
-        <KubeObjectMeta object={object} />
         {this.renderAdditionalColumns(object, extraColumns)}
         {this.renderStatus(object, extraColumns)}
       </div>

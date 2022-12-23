@@ -5,68 +5,54 @@
 import type { IpcMainInvokeEvent } from "electron";
 import { BrowserWindow, Menu } from "electron";
 import { clusterFrameMap } from "../../../../common/cluster-frames";
-import { clusterActivateHandler, clusterSetFrameIdHandler, clusterVisibilityHandler, clusterRefreshHandler, clusterDisconnectHandler, clusterKubectlApplyAllHandler, clusterKubectlDeleteAllHandler, clusterDeleteHandler, clusterSetDeletingHandler, clusterClearDeletingHandler } from "../../../../common/ipc/cluster";
+import { clusterActivateHandler, clusterSetFrameIdHandler, clusterDisconnectHandler, clusterStates } from "../../../../common/ipc/cluster";
 import type { ClusterId } from "../../../../common/cluster-types";
-import { ClusterStore } from "../../../../common/cluster-store/cluster-store";
-import { appEventBus } from "../../../../common/app-event-bus/event-bus";
+import type { ClusterStore } from "../../../../common/cluster-store/cluster-store";
 import { broadcastMainChannel, broadcastMessage, ipcMainHandle, ipcMainOn } from "../../../../common/ipc";
 import type { CatalogEntityRegistry } from "../../../catalog";
 import { pushCatalogToRenderer } from "../../../catalog-pusher";
-import type { ClusterManager } from "../../../cluster-manager";
-import { ResourceApplier } from "../../../resource-applier";
-import { remove } from "fs-extra";
 import type { IComputedValue } from "mobx";
-import type { GetAbsolutePath } from "../../../../common/path/get-absolute-path.injectable";
-import type { MenuItemOpts } from "../../../menu/application-menu-items.injectable";
 import { windowActionHandleChannel, windowLocationChangedChannel, windowOpenAppMenuAsContextMenuChannel } from "../../../../common/ipc/window";
 import { handleWindowAction, onLocationChange } from "../../../ipc/window";
-import { openFilePickingDialogChannel } from "../../../../common/ipc/dialog";
-import { getNativeThemeChannel } from "../../../../common/ipc/native-theme";
-import type { Theme } from "../../../theme/operating-system-theme-state.injectable";
-import type { AskUserForFilePaths } from "../../../ipc/ask-user-for-file-paths.injectable";
-
+import type { ApplicationMenuItemTypes } from "../../../../features/application-menu/main/menu-items/application-menu-item-injection-token";
+import type { Composite } from "../../../../common/utils/composite/get-composite/get-composite";
+import { getApplicationMenuTemplate } from "../../../../features/application-menu/main/populate-application-menu.injectable";
+import type { MenuItemRoot } from "../../../../features/application-menu/main/application-menu-item-composite.injectable";
+import type { EmitAppEvent } from "../../../../common/app-event-bus/emit-event.injectable";
+import type { GetClusterById } from "../../../../common/cluster-store/get-by-id.injectable";
 interface Dependencies {
-  directoryForLensLocalStorage: string;
-  getAbsolutePath: GetAbsolutePath;
-  applicationMenuItems: IComputedValue<MenuItemOpts[]>;
-  clusterManager: ClusterManager;
+  applicationMenuItemComposite: IComputedValue<Composite<ApplicationMenuItemTypes | MenuItemRoot>>;
   catalogEntityRegistry: CatalogEntityRegistry;
   clusterStore: ClusterStore;
-  operatingSystemTheme: IComputedValue<Theme>;
-  askUserForFilePaths: AskUserForFilePaths;
+  emitAppEvent: EmitAppEvent;
+  getClusterById: GetClusterById;
 }
 
-export const setupIpcMainHandlers = ({ applicationMenuItems, directoryForLensLocalStorage, getAbsolutePath, clusterManager, catalogEntityRegistry, clusterStore, operatingSystemTheme, askUserForFilePaths }: Dependencies) => {
+export const setupIpcMainHandlers = ({
+  applicationMenuItemComposite,
+  catalogEntityRegistry,
+  clusterStore,
+  emitAppEvent,
+  getClusterById,
+}: Dependencies) => {
   ipcMainHandle(clusterActivateHandler, (event, clusterId: ClusterId, force = false) => {
-    return ClusterStore.getInstance()
-      .getById(clusterId)
+    return getClusterById(clusterId)
       ?.activate(force);
   });
 
   ipcMainHandle(clusterSetFrameIdHandler, (event: IpcMainInvokeEvent, clusterId: ClusterId) => {
-    const cluster = ClusterStore.getInstance().getById(clusterId);
+    const cluster = getClusterById(clusterId);
 
     if (cluster) {
       clusterFrameMap.set(cluster.id, { frameId: event.frameId, processId: event.processId });
-      cluster.pushState();
 
       pushCatalogToRenderer(catalogEntityRegistry);
     }
   });
 
-  ipcMainOn(clusterVisibilityHandler, (event, clusterId?: ClusterId) => {
-    clusterManager.visibleCluster = clusterId;
-  });
-
-  ipcMainHandle(clusterRefreshHandler, (event, clusterId: ClusterId) => {
-    return ClusterStore.getInstance()
-      .getById(clusterId)
-      ?.refresh({ refreshMetadata: true });
-  });
-
   ipcMainHandle(clusterDisconnectHandler, (event, clusterId: ClusterId) => {
-    appEventBus.emit({ name: "cluster", action: "stop" });
-    const cluster = ClusterStore.getInstance().getById(clusterId);
+    emitAppEvent({ name: "cluster", action: "stop" });
+    const cluster = getClusterById(clusterId);
 
     if (cluster) {
       cluster.disconnect();
@@ -74,90 +60,15 @@ export const setupIpcMainHandlers = ({ applicationMenuItems, directoryForLensLoc
     }
   });
 
-  ipcMainHandle(clusterDeleteHandler, async (event, clusterId: ClusterId) => {
-    appEventBus.emit({ name: "cluster", action: "remove" });
-
-    const clusterStore = ClusterStore.getInstance();
-    const cluster = clusterStore.getById(clusterId);
-
-    if (!cluster) {
-      return;
-    }
-
-    cluster.disconnect();
-    clusterFrameMap.delete(cluster.id);
-
-    // Remove from the cluster store as well, this should clear any old settings
-    clusterStore.clusters.delete(cluster.id);
-
-    try {
-      // remove the local storage file
-      const localStorageFilePath = getAbsolutePath(directoryForLensLocalStorage, `${cluster.id}.json`);
-
-      await remove(localStorageFilePath);
-    } catch {
-      // ignore error
-    }
-  });
-
-  ipcMainHandle(clusterSetDeletingHandler, (event, clusterId: string) => {
-    clusterManager.deleting.add(clusterId);
-  });
-
-  ipcMainHandle(clusterClearDeletingHandler, (event, clusterId: string) => {
-    clusterManager.deleting.delete(clusterId);
-  });
-
-  ipcMainHandle(clusterKubectlApplyAllHandler, async (event, clusterId: ClusterId, resources: string[], extraArgs: string[]) => {
-    appEventBus.emit({ name: "cluster", action: "kubectl-apply-all" });
-    const cluster = ClusterStore.getInstance().getById(clusterId);
-
-    if (cluster) {
-      const applier = new ResourceApplier(cluster);
-
-      try {
-        const stdout = await applier.kubectlApplyAll(resources, extraArgs);
-
-        return { stdout };
-      } catch (error: any) {
-        return { stderr: error };
-      }
-    } else {
-      throw `${clusterId} is not a valid cluster id`;
-    }
-  });
-
-  ipcMainHandle(clusterKubectlDeleteAllHandler, async (event, clusterId: ClusterId, resources: string[], extraArgs: string[]) => {
-    appEventBus.emit({ name: "cluster", action: "kubectl-delete-all" });
-    const cluster = ClusterStore.getInstance().getById(clusterId);
-
-    if (cluster) {
-      const applier = new ResourceApplier(cluster);
-
-      try {
-        const stdout = await applier.kubectlDeleteAll(resources, extraArgs);
-
-        return { stdout };
-      } catch (error: any) {
-        return { stderr: error };
-      }
-    } else {
-      throw `${clusterId} is not a valid cluster id`;
-    }
-  });
-
   ipcMainHandle(windowActionHandleChannel, (event, action) => handleWindowAction(action));
 
   ipcMainOn(windowLocationChangedChannel, () => onLocationChange());
 
-  ipcMainHandle(openFilePickingDialogChannel, (event, opts) => askUserForFilePaths(opts));
-
   ipcMainHandle(broadcastMainChannel, (event, channel, ...args) => broadcastMessage(channel, ...args));
 
   ipcMainOn(windowOpenAppMenuAsContextMenuChannel, async (event) => {
-    const appMenu = applicationMenuItems.get();
-
-    const menu = Menu.buildFromTemplate(appMenu);
+    const electronTemplate = getApplicationMenuTemplate(applicationMenuItemComposite.get());
+    const menu = Menu.buildFromTemplate(electronTemplate);
 
     menu.popup({
       ...BrowserWindow.fromWebContents(event.sender),
@@ -167,9 +78,10 @@ export const setupIpcMainHandlers = ({ applicationMenuItems, directoryForLensLoc
     });
   });
 
-  ipcMainHandle(getNativeThemeChannel, () => {
-    return operatingSystemTheme.get();
-  });
-
-  clusterStore.provideInitialFromMain();
+  ipcMainHandle(clusterStates, () => (
+    clusterStore.clustersList.map(cluster => ({
+      id: cluster.id,
+      state: cluster.getState(),
+    }))
+  ));
 };

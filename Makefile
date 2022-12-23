@@ -5,10 +5,6 @@ CMD_ARGS = $(filter-out $@,$(MAKECMDGOALS))
 
 NPM_RELEASE_TAG ?= latest
 ELECTRON_BUILDER_EXTRA_ARGS ?=
-EXTENSIONS_DIR = ./extensions
-extensions = $(foreach dir, $(wildcard $(EXTENSIONS_DIR)/*), ${dir})
-extension_node_modules = $(foreach dir, $(wildcard $(EXTENSIONS_DIR)/*), ${dir}/node_modules)
-extension_dists = $(foreach dir, $(wildcard $(EXTENSIONS_DIR)/*), ${dir}/dist)
 
 ifeq ($(OS),Windows_NT)
     DETECTED_OS := Windows
@@ -17,8 +13,7 @@ else
 endif
 
 node_modules: yarn.lock
-	yarn install --frozen-lockfile --network-timeout=100000
-	yarn check --verify-tree --integrity
+	yarn install --check-files --frozen-lockfile --network-timeout=100000
 
 binaries/client: node_modules
 	yarn download:binaries
@@ -29,11 +24,12 @@ compile-dev: node_modules
 	yarn compile:renderer --cache
 
 .PHONY: validate-dev
-ci-validate-dev: binaries/client build-extensions compile-dev
+ci-validate-dev: binaries/client compile-dev
 
 .PHONY: dev
-dev: binaries/client build-extensions
+dev: binaries/client
 	rm -rf static/build/
+	yarn run build:tray-icons
 	yarn dev
 
 .PHONY: lint
@@ -45,7 +41,7 @@ tag-release:
 	scripts/tag-release.sh $(CMD_ARGS)
 
 .PHONY: test
-test: binaries/client
+test: node_modules binaries/client
 	yarn run jest $(or $(CMD_ARGS), "src")
 
 .PHONY: integration
@@ -54,8 +50,6 @@ integration: build
 
 .PHONY: build
 build: node_modules binaries/client
-	yarn run npm:fix-build-version
-	$(MAKE) build-extensions -B
 	yarn run build:tray-icons
 	yarn run compile
 ifeq "$(DETECTED_OS)" "Windows"
@@ -64,28 +58,6 @@ ifeq "$(DETECTED_OS)" "Windows"
 endif
 	yarn run electron-builder --publish onTag $(ELECTRON_BUILDER_EXTRA_ARGS)
 
-.PHONY: update-extension-locks
-update-extension-locks:
-	$(foreach dir, $(extensions), (cd $(dir) && rm package-lock.json && ../../node_modules/.bin/npm install --package-lock-only);)
-
-.NOTPARALLEL: $(extension_node_modules)
-$(extension_node_modules): node_modules
-	cd $(@:/node_modules=) && ../../node_modules/.bin/npm install --no-audit --no-fund --no-save
-
-$(extension_dists): src/extensions/npm/extensions/dist $(extension_node_modules)
-	cd $(@:/dist=) && ../../node_modules/.bin/npm run build
-
-.PHONY: clean-old-extensions
-clean-old-extensions:
-	find ./extensions -mindepth 1 -maxdepth 1 -type d '!' -exec test -e '{}/package.json' \; -exec rm -rf {} \;
-
-.PHONY: build-extensions
-build-extensions: node_modules clean-old-extensions $(extension_dists)
-
-.PHONY: test-extensions
-test-extensions: $(extension_node_modules)
-	$(foreach dir, $(extensions), (cd $(dir) && npm run test || exit $?);)
-
 src/extensions/npm/extensions/__mocks__:
 	cp -r __mocks__ src/extensions/npm/extensions/
 
@@ -93,7 +65,7 @@ src/extensions/npm/extensions/dist: src/extensions/npm/extensions/node_modules
 	yarn compile:extension-types
 
 src/extensions/npm/extensions/node_modules: src/extensions/npm/extensions/package.json
-	cd src/extensions/npm/extensions/ && ../../../../node_modules/.bin/npm install --no-audit --no-fund
+	cd src/extensions/npm/extensions/ && ../../../../node_modules/.bin/npm install --no-audit --no-fund --no-save
 
 .PHONY: build-npm
 build-npm: build-extension-types src/extensions/npm/extensions/__mocks__
@@ -116,16 +88,12 @@ build-docs:
 docs: build-docs
 	yarn mkdocs-serve-local
 
-.PHONY: clean-extensions
-clean-extensions:
-	rm -rf $(EXTENSIONS_DIR)/*/{dist,node_modules,*.tgz}
-
 .PHONY: clean-npm
 clean-npm:
 	rm -rf src/extensions/npm/extensions/{dist,__mocks__,node_modules}
 
 .PHONY: clean
-clean: clean-npm clean-extensions
+clean: clean-npm
 	rm -rf binaries/client
 	rm -rf dist
 	rm -rf static/build

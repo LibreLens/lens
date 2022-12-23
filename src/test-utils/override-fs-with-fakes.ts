@@ -3,40 +3,65 @@
  * Licensed under MIT License. See LICENSE in root directory for more information.
  */
 import type { DiContainer } from "@ogre-tools/injectable";
-import readFileInjectable from "../common/fs/read-file.injectable";
-import writeJsonFileInjectable from "../common/fs/write-json-file.injectable";
-import readJsonFileInjectable from "../common/fs/read-json-file.injectable";
-import pathExistsInjectable from "../common/fs/path-exists.injectable";
+import fsInjectable from "../common/fs/fs.injectable";
+import { createFsFromVolume, Volume } from "memfs";
+import type {
+  ensureDirSync as ensureDirSyncImpl,
+  readJsonSync as readJsonSyncImpl,
+  writeJsonSync as writeJsonSyncImpl,
+} from "fs-extra";
 
-export const overrideFsWithFakes = (di: DiContainer) => {
-  const state = new Map();
+export const getOverrideFsWithFakes = () => {
+  const root = createFsFromVolume(Volume.fromJSON({}));
 
-  const readFile = readFileFor(state);
+  const readJsonSync = ((file, opts) => {
+    const options = typeof opts === "string"
+      ? {
+        encoding: opts,
+      }
+      : opts;
+    const value = root.readFileSync(file, options as any) as string;
 
-  di.override(readFileInjectable, () => readFile);
-  di.override(writeJsonFileInjectable, () => (
-    async (filePath, contents) => {
-      state.set(filePath, JSON.stringify(contents));
-    }
-  ));
-  di.override(readJsonFileInjectable, () => (
-    async (filePath: string) => JSON.parse(await readFile(filePath))
-  ));
-  di.override(pathExistsInjectable, () => (
-    (filePath: string) => Promise.resolve(state.has(filePath))
-  ));
-};
+    return JSON.parse(value, options?.reviver);
+  }) as typeof readJsonSyncImpl;
+  const writeJsonSync = ((file, object, opts) => {
+    const options = typeof opts === "string"
+      ? {
+        encoding: opts,
+      }
+      : opts;
 
-const readFileFor = (state: Map<string, string>) => (filePath: string) => {
-  const fileContent = state.get(filePath);
+    root.writeFileSync(file, JSON.stringify(object, options?.replacer, options?.spaces), options as any);
+  }) as typeof writeJsonSyncImpl;
+  const ensureDirSync = ((path, opts) => {
+    const mode = typeof opts === "number"
+      ? opts
+      : opts?.mode;
 
-  if (!fileContent) {
-    const existingFilePaths = [...state.keys()].join('", "');
+    root.mkdirpSync(path, mode);
+  }) as typeof ensureDirSyncImpl;
 
-    throw new Error(
-      `Tried to access file ${filePath} which does not exist. Existing file paths are: "${existingFilePaths}"`,
-    );
-  }
-
-  return Promise.resolve(fileContent);
+  return (di: DiContainer) => {
+    di.override(fsInjectable, () => ({
+      pathExists: async (path) => root.existsSync(path),
+      pathExistsSync: root.existsSync,
+      readFile: root.promises.readFile as any,
+      readFileSync: root.readFileSync as any,
+      readJson: async (file, opts) => readJsonSync(file, opts),
+      readJsonSync,
+      writeFile: root.promises.writeFile as any,
+      writeFileSync: root.writeFileSync as any,
+      writeJson: async (file, obj, opts) => writeJsonSync(file, obj, opts as any),
+      writeJsonSync,
+      readdir: root.promises.readdir as any,
+      lstat: root.promises.lstat as any,
+      rm: root.promises.rm,
+      access: root.promises.access,
+      copy: async (src, dest) => { throw new Error(`Tried to copy '${src}' to '${dest}'. Copying is not yet supported`); },
+      ensureDir: async (path, opts) => ensureDirSync(path, opts),
+      ensureDirSync,
+      createReadStream: root.createReadStream as any,
+      stat: root.promises.stat as any,
+    }));
+  };
 };

@@ -11,17 +11,17 @@ import { getDiForUnitTesting } from "../../../getDiForUnitTesting";
 import type { DiContainer } from "@ogre-tools/injectable";
 import type { DiRender } from "../../test-utils/renderFor";
 import { renderFor } from "../../test-utils/renderFor";
-import topBarItemsInjectable from "./top-bar-items/top-bar-items.injectable";
 import { computed, observable } from "mobx";
 import rendererExtensionsInjectable from "../../../../extensions/renderer-extensions.injectable";
-import closeWindowInjectable from "./close-window.injectable";
-import goBackInjectable from "./go-back.injectable";
-import goForwardInjectable from "./go-forward.injectable";
-import maximizeWindowInjectable from "./maximize-window.injectable";
-import openAppContextMenuInjectable from "./open-app-context-menu.injectable";
-import toggleMaximizeWindowInjectable from "./toggle-maximize-window.injectable";
+import closeWindowInjectable from "./top-bar-items/window-controls/close-window/close-window.injectable";
+import goBackInjectable from "./top-bar-items/navigation-to-back/go-back/go-back.injectable";
+import maximizeWindowInjectable from "./top-bar-items/window-controls/maximize-window/maximize-window.injectable";
+import openAppContextMenuInjectable from "./top-bar-items/context-menu/open-app-context-menu/open-app-context-menu.injectable";
+import toggleMaximizeWindowInjectable from "./toggle-maximize-window/toggle-maximize-window.injectable";
 import topBarStateInjectable from "./state.injectable";
 import platformInjectable from "../../../../common/vars/platform.injectable";
+import goForwardInjectable from "./top-bar-items/navigation-to-forward/go-forward/go-forward.injectable";
+import currentlyInClusterFrameInjectable from "../../../routes/currently-in-cluster-frame.injectable";
 
 describe("<TopBar/>", () => {
   let di: DiContainer;
@@ -43,6 +43,7 @@ describe("<TopBar/>", () => {
     di.override(closeWindowInjectable, () => closeWindow = jest.fn());
     di.override(maximizeWindowInjectable, () => maximizeWindow = jest.fn());
     di.override(toggleMaximizeWindowInjectable, () => toggleMaximizeWindow = jest.fn());
+    di.override(currentlyInClusterFrameInjectable, () => false);
 
     render = renderFor(di);
   });
@@ -54,6 +55,7 @@ describe("<TopBar/>", () => {
         nextEnabled: true,
       }));
     });
+
     it("renders w/o errors", () => {
       const { container } = render(<TopBar/>);
 
@@ -93,23 +95,6 @@ describe("<TopBar/>", () => {
       fireEvent.click(nextButton);
 
       expect(goForward).toBeCalled();
-    });
-
-    it("renders items", async () => {
-      const testId = "testId";
-      const text = "an item";
-
-      di.override(topBarItemsInjectable, () => computed(() => [
-        {
-          components: {
-            Item: () => <span data-testid={testId}>{text}</span>,
-          },
-        },
-      ]));
-
-      const { findByTestId } = render(<TopBar/>);
-
-      expect(await findByTestId(testId)).toHaveTextContent(text);
     });
 
     describe("on macos", () => {

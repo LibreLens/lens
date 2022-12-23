@@ -36,6 +36,15 @@ export function hasTypedProperty<S extends object, K extends PropertyKey, V>(val
 }
 
 /**
+ * Narrows `val` to include the property `key` with type string
+ * @param val the value that we are trying to type narrow
+ * @param key The key to test if it is present on the object (must be a literal for tsc to do any meaningful typing)
+ */
+export function hasStringProperty<S extends object, K extends PropertyKey>(val: S, key: K): val is (S & { [key in K]: string }) {
+  return hasOwnProperty(val, key) && isString(val[key]);
+}
+
+/**
  * Narrows `val` to include the property `key` with type `V | undefined` or doesn't contain it
  * @param val the value that we are trying to type narrow
  * @param key The key to test if it is present on the object (must be a literal for tsc to do any meaningful typing)
@@ -103,7 +112,7 @@ export function isBoolean(val: unknown): val is boolean {
  * checks if val is of type object and isn't null
  * @param val the value to be checked
  */
-export function isObject(val: unknown): val is object {
+export function isObject(val: unknown): val is Record<string | symbol | number, unknown> {
   return typeof val === "object" && val !== null;
 }
 
@@ -112,6 +121,10 @@ export function isObject(val: unknown): val is object {
  */
 export function isDefined<T>(val: T | undefined | null): val is T {
   return val != null;
+}
+
+export function isFunction(val: unknown): val is (...args: unknown[]) => unknown {
+  return typeof val === "function";
 }
 
 /**
@@ -135,6 +148,15 @@ export function bindPredicate<FnArgs extends any[], T>(fn: (arg1: unknown, ...ar
 
 export function hasDefiniteField<Field extends keyof T, T>(field: Field): (val: T) => val is T & { [f in Field]-?: NonNullable<T[Field]> } {
   return (val): val is T & { [f in Field]-?: NonNullable<T[Field]> } => val[field] != null;
+}
+
+export function isPromiseLike(res: unknown): res is (Promise<unknown> | { then: (fn: (val: unknown) => any) => Promise<unknown> }) {
+  if (res instanceof Promise) {
+    return true;
+  }
+
+  return isObject(res)
+    && hasTypedProperty(res, "then", isFunction);
 }
 
 export function isPromiseSettledRejected<T>(result: PromiseSettledResult<T>): result is PromiseRejectedResult {

@@ -4,76 +4,66 @@
  */
 
 import type { FSWatcher } from "chokidar";
-import { watch } from "chokidar";
-import path from "path";
-import os from "os";
-import { Console } from "console";
-import * as fse from "fs-extra";
 import { getDiForUnitTesting } from "../../main/getDiForUnitTesting";
 import extensionDiscoveryInjectable from "../extension-discovery/extension-discovery.injectable";
 import type { ExtensionDiscovery } from "../extension-discovery/extension-discovery";
-import installExtensionInjectable
-  from "../extension-installer/install-extension/install-extension.injectable";
-import directoryForUserDataInjectable
-  from "../../common/app-paths/directory-for-user-data/directory-for-user-data.injectable";
-import mockFs from "mock-fs";
+import installExtensionInjectable from "../extension-installer/install-extension/install-extension.injectable";
+import directoryForUserDataInjectable from "../../common/app-paths/directory-for-user-data/directory-for-user-data.injectable";
 import { delay } from "../../renderer/utils";
-import { observable, when } from "mobx";
-import appVersionInjectable from "../../common/vars/app-version.injectable";
-
-jest.setTimeout(60_000);
-
-jest.mock("../../common/ipc");
-jest.mock("chokidar", () => ({
-  watch: jest.fn(),
-}));
-
-jest.mock("fs-extra");
-jest.mock("electron", () => ({
-  app: {
-    getVersion: () => "99.99.99",
-    getName: () => "lens",
-    setName: jest.fn(),
-    setPath: jest.fn(),
-    getPath: () => "tmp",
-    getLocale: () => "en",
-    setLoginItemSettings: jest.fn(),
-  },
-  ipcMain: {
-    on: jest.fn(),
-    handle: jest.fn(),
-  },
-}));
-
-console = new Console(process.stdout, process.stderr); // fix mockFS
-const mockedWatch = watch as jest.MockedFunction<typeof watch>;
-const mockedFse = fse as jest.Mocked<typeof fse>;
+import { observable, runInAction, when } from "mobx";
+import readJsonFileInjectable from "../../common/fs/read-json-file.injectable";
+import pathExistsInjectable from "../../common/fs/path-exists.injectable";
+import watchInjectable from "../../common/fs/watch/watch.injectable";
+import extensionApiVersionInjectable from "../../common/vars/extension-api-version.injectable";
+import removePathInjectable from "../../common/fs/remove.injectable";
+import type { JoinPaths } from "../../common/path/join-paths.injectable";
+import joinPathsInjectable from "../../common/path/join-paths.injectable";
+import homeDirectoryPathInjectable from "../../common/os/home-directory-path.injectable";
+import pathExistsSyncInjectable from "../../common/fs/path-exists-sync.injectable";
+import readJsonSyncInjectable from "../../common/fs/read-json-sync.injectable";
+import writeJsonSyncInjectable from "../../common/fs/write-json-sync.injectable";
 
 describe("ExtensionDiscovery", () => {
   let extensionDiscovery: ExtensionDiscovery;
+  let readJsonFileMock: jest.Mock;
+  let pathExistsMock: jest.Mock;
+  let watchMock: jest.Mock;
+  let joinPaths: JoinPaths;
+  let homeDirectoryPath: string;
 
   beforeEach(() => {
     const di = getDiForUnitTesting({ doGeneralOverrides: true });
 
-    di.override(directoryForUserDataInjectable, () => "some-directory-for-user-data");
+    di.override(directoryForUserDataInjectable, () => "/some-directory-for-user-data");
     di.override(installExtensionInjectable, () => () => Promise.resolve());
-    di.override(appVersionInjectable, () => "5.0.0");
+    di.override(extensionApiVersionInjectable, () => "5.0.0");
+    di.override(pathExistsSyncInjectable, () => () => { throw new Error("tried call pathExistsSync without override"); });
+    di.override(readJsonSyncInjectable, () => () => { throw new Error("tried call readJsonSync without override"); });
+    di.override(writeJsonSyncInjectable, () => () => { throw new Error("tried call writeJsonSync without override"); });
 
-    mockFs();
+    joinPaths = di.inject(joinPathsInjectable);
+    homeDirectoryPath = di.inject(homeDirectoryPathInjectable);
+
+    readJsonFileMock = jest.fn();
+    di.override(readJsonFileInjectable, () => readJsonFileMock);
+
+    pathExistsMock = jest.fn(() => Promise.resolve(true));
+    di.override(pathExistsInjectable, () => pathExistsMock);
+
+    watchMock = jest.fn();
+    di.override(watchInjectable, () => watchMock);
+
+    di.override(removePathInjectable, () => async () => {}); // allow deleting files for now
 
     extensionDiscovery = di.inject(extensionDiscoveryInjectable);
-  });
-
-  afterEach(() => {
-    mockFs.restore();
   });
 
   it("emits add for added extension", async () => {
     const letTestFinish = observable.box(false);
     let addHandler!: (filePath: string) => void;
 
-    mockedFse.readJson.mockImplementation((p) => {
-      expect(p).toBe(path.join(os.homedir(), ".k8slens/extensions/my-extension/package.json"));
+    readJsonFileMock.mockImplementation((p) => {
+      expect(p).toBe(joinPaths(homeDirectoryPath, ".k8slens/extensions/my-extension/package.json"));
 
       return {
         name: "my-extension",
@@ -83,8 +73,6 @@ describe("ExtensionDiscovery", () => {
         },
       };
     });
-
-    mockedFse.pathExists.mockImplementation(() => true);
 
     const mockWatchInstance = {
       on: jest.fn((event: string, handler: typeof addHandler) => {
@@ -96,7 +84,7 @@ describe("ExtensionDiscovery", () => {
       }),
     } as unknown as FSWatcher;
 
-    mockedWatch.mockImplementationOnce(() => mockWatchInstance);
+    watchMock.mockImplementationOnce(() => mockWatchInstance);
 
     // Need to force isLoaded to be true so that the file watching is started
     extensionDiscovery.isLoaded = true;
@@ -106,7 +94,7 @@ describe("ExtensionDiscovery", () => {
     extensionDiscovery.events.on("add", extension => {
       expect(extension).toEqual({
         absolutePath: expect.any(String),
-        id: path.normalize("some-directory-for-user-data/node_modules/my-extension/package.json"),
+        id: "/some-directory-for-user-data/node_modules/my-extension/package.json",
         isBundled: false,
         isEnabled: false,
         isCompatible: true,
@@ -117,12 +105,12 @@ describe("ExtensionDiscovery", () => {
             lens: "5.0.0",
           },
         },
-        manifestPath: path.normalize("some-directory-for-user-data/node_modules/my-extension/package.json"),
+        manifestPath: "/some-directory-for-user-data/node_modules/my-extension/package.json",
       });
-      letTestFinish.set(true);
+      runInAction(() => letTestFinish.set(true));
     });
 
-    addHandler(path.join(extensionDiscovery.localFolderPath, "/my-extension/package.json"));
+    addHandler(joinPaths(extensionDiscovery.localFolderPath, "/my-extension/package.json"));
     await when(() => letTestFinish.get());
   });
 
@@ -139,7 +127,7 @@ describe("ExtensionDiscovery", () => {
       }),
     } as unknown as FSWatcher;
 
-    mockedWatch.mockImplementationOnce(() => mockWatchInstance);
+    watchMock.mockImplementationOnce(() => mockWatchInstance);
 
     // Need to force isLoaded to be true so that the file watching is started
     extensionDiscovery.isLoaded = true;
@@ -150,7 +138,7 @@ describe("ExtensionDiscovery", () => {
 
     extensionDiscovery.events.on("add", onAdd);
 
-    addHandler(path.join(extensionDiscovery.localFolderPath, "/my-extension/node_modules/dep/package.json"));
+    addHandler(joinPaths(extensionDiscovery.localFolderPath, "/my-extension/node_modules/dep/package.json"));
 
     await delay(10);
 

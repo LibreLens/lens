@@ -16,27 +16,35 @@ import type { PieChartData } from "../chart";
 import { PieChart } from "../chart";
 import { ClusterNoMetrics } from "./cluster-no-metrics";
 import { bytesToUnits, cssNames } from "../../utils";
-import type { ThemeStore } from "../../themes/store";
+import type { LensTheme } from "../../themes/lens-theme";
 import { getMetricLastPoints } from "../../../common/k8s-api/endpoints/metrics.api";
 import { withInjectables } from "@ogre-tools/injectable-react";
 import clusterOverviewStoreInjectable from "./cluster-overview-store/cluster-overview-store.injectable";
 import nodeStoreInjectable from "../+nodes/store.injectable";
-import themeStoreInjectable from "../../themes/store.injectable";
+import type { IComputedValue } from "mobx";
+import activeThemeInjectable from "../../themes/active.injectable";
+import type { ClusterMetricData } from "../../../common/k8s-api/endpoints/metrics.api/request-cluster-metrics-by-node-names.injectable";
 
 function createLabels(rawLabelData: [string, number | undefined][]): string[] {
   return rawLabelData.map(([key, value]) => `${key}: ${value?.toFixed(2) || "N/A"}`);
 }
 
+const checkedBytesToUnits = (value: number | undefined) => (
+  typeof value === "number"
+    ? bytesToUnits(value)
+    : "N/A"
+);
+
 interface Dependencies {
   clusterOverviewStore: ClusterOverviewStore;
   nodeStore: NodeStore;
-  themeStore: ThemeStore;
+  activeTheme: IComputedValue<LensTheme>;
 }
 
 const NonInjectedClusterPieCharts = observer(({
   clusterOverviewStore,
   nodeStore,
-  themeStore,
+  activeTheme,
 }: Dependencies) => {
   const renderLimitWarning = () => {
     return (
@@ -47,16 +55,28 @@ const NonInjectedClusterPieCharts = observer(({
     );
   };
 
-  const renderCharts = () => {
-    const data = getMetricLastPoints(clusterOverviewStore.metrics);
-    const { memoryUsage, memoryRequests, memoryAllocatableCapacity, memoryCapacity, memoryLimits } = data;
-    const { cpuUsage, cpuRequests, cpuAllocatableCapacity, cpuCapacity, cpuLimits } = data;
-    const { podUsage, podAllocatableCapacity, podCapacity } = data;
-    const cpuLimitsOverload = cpuLimits > cpuAllocatableCapacity;
-    const memoryLimitsOverload = memoryLimits > memoryAllocatableCapacity;
-    const defaultColor = themeStore.activeTheme.colors.pieChartDefaultColor;
+  const renderCharts = (lastPoints: Partial<Record<keyof ClusterMetricData, number>>) => {
+    const {
+      memoryUsage, memoryRequests, memoryAllocatableCapacity, memoryCapacity, memoryLimits,
+      cpuUsage, cpuRequests, cpuAllocatableCapacity, cpuCapacity, cpuLimits,
+      podUsage, podAllocatableCapacity, podCapacity,
+    } = lastPoints;
 
-    if (!memoryCapacity || !cpuCapacity || !podCapacity || !memoryAllocatableCapacity || !cpuAllocatableCapacity || !podAllocatableCapacity) return null;
+    if (
+      typeof cpuCapacity !== "number" ||
+      typeof cpuAllocatableCapacity !== "number" ||
+      typeof podCapacity !== "number" ||
+      typeof podAllocatableCapacity !== "number" ||
+      typeof memoryAllocatableCapacity !== "number" ||
+      typeof memoryCapacity !== "number" ||
+      typeof memoryUsage !== "number" ||
+      typeof memoryRequests !== "number"
+    ) {
+      return null;
+    }
+
+    const defaultColor = activeTheme.get().colors.pieChartDefaultColor;
+
     const cpuData: PieChartData = {
       datasets: [
         {
@@ -86,7 +106,7 @@ const NonInjectedClusterPieCharts = observer(({
         {
           data: [
             cpuLimits,
-            cpuLimitsOverload ? 0 : cpuAllocatableCapacity - cpuLimits,
+            Math.max(0, cpuAllocatableCapacity - (cpuLimits ?? cpuAllocatableCapacity)),
           ],
           backgroundColor: [
             "#3d90ce",
@@ -133,7 +153,7 @@ const NonInjectedClusterPieCharts = observer(({
         {
           data: [
             memoryLimits,
-            memoryLimitsOverload ? 0 : memoryAllocatableCapacity - memoryLimits,
+            Math.max(0, memoryAllocatableCapacity - (memoryLimits ?? memoryAllocatableCapacity)),
           ],
           backgroundColor: [
             "#3d90ce",
@@ -146,7 +166,7 @@ const NonInjectedClusterPieCharts = observer(({
       labels: [
         `Usage: ${bytesToUnits(memoryUsage)}`,
         `Requests: ${bytesToUnits(memoryRequests)}`,
-        `Limits: ${bytesToUnits(memoryLimits)}`,
+        `Limits: ${checkedBytesToUnits(memoryLimits)}`,
         `Allocatable Capacity: ${bytesToUnits(memoryAllocatableCapacity)}`,
         `Capacity: ${bytesToUnits(memoryCapacity)}`,
       ],
@@ -190,7 +210,7 @@ const NonInjectedClusterPieCharts = observer(({
               defaultColor,
             ]}
           />
-          {cpuLimitsOverload && renderLimitWarning()}
+          {((cpuLimits ?? cpuAllocatableCapacity) > cpuAllocatableCapacity) && renderLimitWarning()}
         </div>
         <div className={cssNames(styles.chart, "flex column align-center box grow")}>
           <PieChart
@@ -204,7 +224,7 @@ const NonInjectedClusterPieCharts = observer(({
               defaultColor,
             ]}
           />
-          {memoryLimitsOverload && renderLimitWarning()}
+          {((memoryLimits ?? memoryAllocatableCapacity) > memoryAllocatableCapacity) && renderLimitWarning()}
         </div>
         <div className={cssNames(styles.chart, "flex column align-center box grow")}>
           <PieChart
@@ -217,7 +237,7 @@ const NonInjectedClusterPieCharts = observer(({
     );
   };
 
-  const renderContent = ({ metricNodeRole, metricsLoaded }: ClusterOverviewStore) => {
+  const renderContent = ({ metricNodeRole, metrics }: ClusterOverviewStore) => {
     const { masterNodes, workerNodes } = nodeStore;
     const nodes = metricNodeRole === MetricNodeRole.MASTER ? masterNodes : workerNodes;
 
@@ -230,14 +250,16 @@ const NonInjectedClusterPieCharts = observer(({
       );
     }
 
-    if (!metricsLoaded) {
+    if (!metrics) {
       return (
         <div className={cssNames(styles.empty, "flex justify-center align-center box grow")}>
           <Spinner/>
         </div>
       );
     }
-    const { memoryCapacity, cpuCapacity, podCapacity } = getMetricLastPoints(clusterOverviewStore.metrics);
+
+    const lastPoints = getMetricLastPoints(metrics);
+    const { memoryCapacity, cpuCapacity, podCapacity } = lastPoints;
 
     if (!memoryCapacity || !cpuCapacity || !podCapacity) {
       return (
@@ -247,7 +269,7 @@ const NonInjectedClusterPieCharts = observer(({
       );
     }
 
-    return renderCharts();
+    return renderCharts(lastPoints);
   };
 
   return (
@@ -261,6 +283,6 @@ export const ClusterPieCharts = withInjectables<Dependencies>(NonInjectedCluster
   getProps: (di) => ({
     clusterOverviewStore: di.inject(clusterOverviewStoreInjectable),
     nodeStore: di.inject(nodeStoreInjectable),
-    themeStore: di.inject(themeStoreInjectable),
+    activeTheme: di.inject(activeThemeInjectable),
   }),
 });

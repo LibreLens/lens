@@ -4,13 +4,14 @@
  */
 import { getInjectable } from "@ogre-tools/injectable";
 import { initClusterFrame } from "./init-cluster-frame";
-import extensionLoaderInjectable from "../../../../extensions/extension-loader/extension-loader.injectable";
 import catalogEntityRegistryInjectable from "../../../api/catalog/entity/registry.injectable";
 import frameRoutingIdInjectable from "./frame-routing-id/frame-routing-id.injectable";
 import hostedClusterInjectable from "../../../cluster-frame-context/hosted-cluster.injectable";
-import appEventBusInjectable from "../../../../common/app-event-bus/app-event-bus.injectable";
-import clusterFrameContextInjectable from "../../../cluster-frame-context/cluster-frame-context.injectable";
 import assert from "assert";
+import emitAppEventInjectable from "../../../../common/app-event-bus/emit-event.injectable";
+import loadExtensionsInjectable from "../../load-extensions.injectable";
+import loggerInjectable from "../../../../common/logger.injectable";
+import showErrorNotificationInjectable from "../../../components/notifications/show-error-notification.injectable";
 
 const initClusterFrameInjectable = getInjectable({
   id: "init-cluster-frame",
@@ -22,11 +23,12 @@ const initClusterFrameInjectable = getInjectable({
 
     return initClusterFrame({
       hostedCluster,
-      loadExtensions: di.inject(extensionLoaderInjectable).loadOnClusterRenderer,
+      loadExtensions: di.inject(loadExtensionsInjectable),
       catalogEntityRegistry: di.inject(catalogEntityRegistryInjectable),
       frameRoutingId: di.inject(frameRoutingIdInjectable),
-      emitEvent: di.inject(appEventBusInjectable).emit,
-      clusterFrameContext: di.inject(clusterFrameContextInjectable),
+      emitAppEvent: di.inject(emitAppEventInjectable),
+      logger: di.inject(loggerInjectable),
+      showErrorNotification: di.inject(showErrorNotificationInjectable),
     });
   },
 });

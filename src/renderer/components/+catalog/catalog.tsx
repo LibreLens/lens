@@ -15,11 +15,11 @@ import { MenuItem, MenuActions } from "../menu";
 import type { CatalogEntityContextMenu } from "../../api/catalog-entity";
 import type { CatalogCategory, CatalogCategoryRegistry, CatalogEntity } from "../../../common/catalog";
 import { CatalogAddButton } from "./catalog-add-button";
-import { Notifications } from "../notifications";
+import type { ShowNotification } from "../notifications";
 import { MainLayout } from "../layout/main-layout";
 import type { StorageLayer } from "../../utils";
 import { prevDefault } from "../../utils";
-import { CatalogEntityDetails } from "./catalog-entity-details";
+import { CatalogEntityDetails } from "./entity-details/view";
 import { CatalogMenu } from "./catalog-menu";
 import { RenderDelay } from "../render-delay/render-delay";
 import { Icon } from "../icon";
@@ -37,8 +37,6 @@ import type { NavigateToCatalog } from "../../../common/front-end-routing/routes
 import navigateToCatalogInjectable from "../../../common/front-end-routing/routes/catalog/navigate-to-catalog.injectable";
 import catalogRouteParametersInjectable from "./catalog-route-parameters.injectable";
 import { browseCatalogTab } from "./catalog-browse-tab";
-import type { AppEvent } from "../../../common/app-event-bus/event-bus";
-import appEventBusInjectable from "../../../common/app-event-bus/app-event-bus.injectable";
 import hotbarStoreInjectable from "../../../common/hotbars/store.injectable";
 import type { HotbarStore } from "../../../common/hotbars/store";
 import type { VisitEntityContextMenu } from "../../../common/catalog/visit-entity-context-menu.injectable";
@@ -48,13 +46,18 @@ import type { Navigate } from "../../navigation/navigate.injectable";
 import navigateInjectable from "../../navigation/navigate.injectable";
 import type { NormalizeCatalogEntityContextMenu } from "../../catalog/normalize-menu-item.injectable";
 import normalizeCatalogEntityContextMenuInjectable from "../../catalog/normalize-menu-item.injectable";
+import type { EmitAppEvent } from "../../../common/app-event-bus/emit-event.injectable";
+import emitAppEventInjectable from "../../../common/app-event-bus/emit-event.injectable";
+import type { Logger } from "../../../common/logger";
+import loggerInjectable from "../../../common/logger.injectable";
+import showErrorNotificationInjectable from "../notifications/show-error-notification.injectable";
 
 interface Dependencies {
   catalogPreviousActiveTabStorage: StorageLayer<string | null>;
   catalogEntityStore: CatalogEntityStore;
   getCategoryColumns: (params: GetCategoryColumnsParams) => CategoryColumns;
   customCategoryViews: IComputedValue<Map<string, Map<string, RegisteredCustomCategoryViewDecl>>>;
-  emitEvent: (event: AppEvent) => void;
+  emitEvent: EmitAppEvent;
   routeParameters: {
     group: IComputedValue<string>;
     kind: IComputedValue<string>;
@@ -65,12 +68,14 @@ interface Dependencies {
   visitEntityContextMenu: VisitEntityContextMenu;
   navigate: Navigate;
   normalizeMenuItem: NormalizeCatalogEntityContextMenu;
+  showErrorNotification: ShowNotification;
+  logger: Logger;
 }
 
 @observer
 class NonInjectedCatalog extends React.Component<Dependencies> {
   private readonly menuItems = observable.array<CatalogEntityContextMenu>();
-  @observable activeTab?: string;
+  @observable activeTab: string | undefined = undefined;
 
   constructor(props: Dependencies) {
     super(props);
@@ -79,7 +84,7 @@ class NonInjectedCatalog extends React.Component<Dependencies> {
 
   @computed
   get routeActiveTab(): string {
-    const { group, kind } = this.props.routeParameters;
+    const { routeParameters: { group, kind }, catalogPreviousActiveTabStorage } = this.props;
 
     const dereferencedGroup = group.get();
     const dereferencedKind = kind.get();
@@ -88,13 +93,7 @@ class NonInjectedCatalog extends React.Component<Dependencies> {
       return `${dereferencedGroup}/${dereferencedKind}`;
     }
 
-    const previousTab = this.props.catalogPreviousActiveTabStorage.get();
-
-    if (previousTab) {
-      return previousTab;
-    }
-
-    return browseCatalogTab;
+    return catalogPreviousActiveTabStorage.get() || browseCatalogTab;
   }
 
   async componentDidMount() {
@@ -102,6 +101,8 @@ class NonInjectedCatalog extends React.Component<Dependencies> {
       catalogEntityStore,
       catalogPreviousActiveTabStorage,
       catalogCategoryRegistry,
+      logger,
+      showErrorNotification,
     } = this.props;
 
     disposeOnUnmount(this, [
@@ -110,7 +111,11 @@ class NonInjectedCatalog extends React.Component<Dependencies> {
         catalogPreviousActiveTabStorage.set(this.routeActiveTab);
 
         try {
-          await when(() => (routeTab === browseCatalogTab || !!catalogCategoryRegistry.filteredItems.find(i => i.getId() === routeTab)), { timeout: 5_000 }); // we need to wait because extensions might take a while to load
+          if (routeTab !== browseCatalogTab) {
+            // we need to wait because extensions might take a while to load
+            await when(() => Boolean(catalogCategoryRegistry.filteredItems.find(i => i.getId() === routeTab)), { timeout: 5_000 });
+          }
+
           const item = catalogCategoryRegistry.filteredItems.find(i => i.getId() === routeTab);
 
           runInAction(() => {
@@ -118,8 +123,8 @@ class NonInjectedCatalog extends React.Component<Dependencies> {
             catalogEntityStore.activeCategory.set(item);
           });
         } catch (error) {
-          console.error(error);
-          Notifications.error((
+          logger.warn("Failed to find route tab", error);
+          showErrorNotification((
             <p>
               {"Unknown category: "}
               {routeTab}
@@ -198,9 +203,14 @@ class NonInjectedCatalog extends React.Component<Dependencies> {
     };
 
     return (
-      <MenuActions id={`menu-actions-for-catalog-for-${entity.getId()}`} onOpen={onOpen}>
+      <MenuActions
+        id={`menu-actions-for-catalog-for-${entity.getId()}`}
+        data-testid={`menu-actions-for-catalog-for-${entity.getId()}`}
+        onOpen={onOpen}
+      >
         <MenuItem
           key="open-details"
+          data-testid={`open-details-menu-item-for-${entity.getId()}`}
           onClick={() => this.props.catalogEntityStore.selectedItemId.set(entity.getId())}
         >
           View Details
@@ -253,7 +263,7 @@ class NonInjectedCatalog extends React.Component<Dependencies> {
 
   renderViews = (activeCategory: CatalogCategory | undefined) => {
     if (!activeCategory) {
-      return this.renderList(activeCategory);
+      return this.renderList(undefined);
     }
 
     const customViews = this.props.customCategoryViews.get()
@@ -301,15 +311,12 @@ class NonInjectedCatalog extends React.Component<Dependencies> {
         {...getCategoryColumns({ activeCategory })}
         onDetails={this.onDetails}
         renderItemMenu={this.renderItemMenu}
+        data-testid={`catalog-list-for-${activeCategory?.metadata.name ?? "browse-all"}`}
       />
     );
   }
 
   render() {
-    if (!this.props.catalogEntityStore) {
-      return null;
-    }
-
     const activeCategory = this.props.catalogEntityStore.activeCategory.get();
     const selectedItem = this.props.catalogEntityStore.selectedItem.get();
 
@@ -356,11 +363,13 @@ export const Catalog = withInjectables<Dependencies>(NonInjectedCatalog, {
     customCategoryViews: di.inject(customCategoryViewsInjectable),
     routeParameters: di.inject(catalogRouteParametersInjectable),
     navigateToCatalog: di.inject(navigateToCatalogInjectable),
-    emitEvent: di.inject(appEventBusInjectable).emit,
+    emitEvent: di.inject(emitAppEventInjectable),
     hotbarStore: di.inject(hotbarStoreInjectable),
     catalogCategoryRegistry: di.inject(catalogCategoryRegistryInjectable),
     visitEntityContextMenu: di.inject(visitEntityContextMenuInjectable),
     navigate: di.inject(navigateInjectable),
     normalizeMenuItem: di.inject(normalizeCatalogEntityContextMenuInjectable),
+    logger: di.inject(loggerInjectable),
+    showErrorNotification: di.inject(showErrorNotificationInjectable),
   }),
 });

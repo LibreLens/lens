@@ -18,13 +18,13 @@ import { createClusterInjectionToken } from "../cluster/create-cluster-injection
 import directoryForUserDataInjectable from "../app-paths/directory-for-user-data/directory-for-user-data.injectable";
 import { getDiForUnitTesting } from "../../main/getDiForUnitTesting";
 import getConfigurationFileModelInjectable from "../get-configuration-file-model/get-configuration-file-model.injectable";
-import appVersionInjectable from "../vars/app-version.injectable";
 import assert from "assert";
 import directoryForTempInjectable from "../app-paths/directory-for-temp/directory-for-temp.injectable";
 import kubectlBinaryNameInjectable from "../../main/kubectl/binary-name.injectable";
 import kubectlDownloadingNormalizedArchInjectable from "../../main/kubectl/normalized-arch.injectable";
 import normalizedPlatformInjectable from "../vars/normalized-platform.injectable";
 import fsInjectable from "../fs/fs.injectable";
+import storeMigrationVersionInjectable from "../vars/store-migration-version.injectable";
 
 console = new Console(stdout, stderr);
 
@@ -93,10 +93,9 @@ describe("cluster-store", () => {
     mainDi.override(normalizedPlatformInjectable, () => "darwin");
 
     mainDi.permitSideEffects(getConfigurationFileModelInjectable);
-    mainDi.permitSideEffects(clusterStoreInjectable);
-    mainDi.permitSideEffects(fsInjectable);
+    mainDi.unoverride(getConfigurationFileModelInjectable);
 
-    mainDi.unoverride(clusterStoreInjectable);
+    mainDi.permitSideEffects(fsInjectable);
   });
 
   afterEach(() => {
@@ -107,23 +106,19 @@ describe("cluster-store", () => {
     let getCustomKubeConfigDirectory: (directoryName: string) => string;
 
     beforeEach(async () => {
-      getCustomKubeConfigDirectory = mainDi.inject(
-        getCustomKubeConfigDirectoryInjectable,
-      );
+      getCustomKubeConfigDirectory = mainDi.inject(getCustomKubeConfigDirectoryInjectable);
 
-      const mockOpts = {
+      mockFs({
         "some-directory-for-user-data": {
           "lens-cluster-store.json": JSON.stringify({}),
         },
-      };
-
-      mockFs(mockOpts);
+      });
 
       createCluster = mainDi.inject(createClusterInjectionToken);
 
       clusterStore = mainDi.inject(clusterStoreInjectable);
 
-      clusterStore.unregisterIpcListener();
+      clusterStore.load();
     });
 
     afterEach(() => {
@@ -207,7 +202,7 @@ describe("cluster-store", () => {
 
   describe("config with existing clusters", () => {
     beforeEach(() => {
-      const mockOpts = {
+      mockFs({
         "temp-kube-config": kubeconfig,
         "some-directory-for-user-data": {
           "lens-cluster-store.json": JSON.stringify({
@@ -241,13 +236,12 @@ describe("cluster-store", () => {
             ],
           }),
         },
-      };
-
-      mockFs(mockOpts);
+      });
 
       createCluster = mainDi.inject(createClusterInjectionToken);
 
       clusterStore = mainDi.inject(clusterStoreInjectable);
+      clusterStore.load();
     });
 
     afterEach(() => {
@@ -297,7 +291,7 @@ users:
     token: kubeconfig-user-q4lm4:xxxyyyy
 `;
 
-      const mockOpts = {
+      mockFs({
         "invalid-kube-config": invalidKubeconfig,
         "valid-kube-config": kubeconfig,
         "some-directory-for-user-data": {
@@ -325,13 +319,12 @@ users:
             ],
           }),
         },
-      };
-
-      mockFs(mockOpts);
+      });
 
       createCluster = mainDi.inject(createClusterInjectionToken);
 
       clusterStore = mainDi.inject(clusterStoreInjectable);
+      clusterStore.load();
     });
 
     afterEach(() => {
@@ -347,7 +340,7 @@ users:
 
   describe("pre 3.6.0-beta.1 config with an existing cluster", () => {
     beforeEach(() => {
-      const mockOpts = {
+      mockFs({
         "some-directory-for-user-data": {
           "lens-cluster-store.json": JSON.stringify({
             __internal__: {
@@ -368,15 +361,14 @@ users:
           }),
           icon_path: testDataIcon,
         },
-      };
+      });
 
-      mockFs(mockOpts);
-
-      mainDi.override(appVersionInjectable, () => "3.6.0");
+      mainDi.override(storeMigrationVersionInjectable, () => "3.6.0");
 
       createCluster = mainDi.inject(createClusterInjectionToken);
 
       clusterStore = mainDi.inject(clusterStoreInjectable);
+      clusterStore.load();
     });
 
     afterEach(() => {

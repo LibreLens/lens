@@ -11,25 +11,19 @@ import kebabCase from "lodash/kebabCase";
 import { disposeOnUnmount, observer } from "mobx-react";
 import { DrawerItem, DrawerItemLabels } from "../drawer";
 import { Badge } from "../badge";
-import { ResourceMetrics } from "../resource-metrics";
 import type { KubeObjectDetailsProps } from "../kube-object-details";
-import type { ClusterMetricData } from "../../../common/k8s-api/endpoints";
-import { formatNodeTaint, getMetricsByNodeNames, Node } from "../../../common/k8s-api/endpoints";
-import { NodeCharts } from "./node-charts";
-import { makeObservable, observable, reaction } from "mobx";
+import { formatNodeTaint, Node } from "../../../common/k8s-api/endpoints";
 import { PodDetailsList } from "../+workloads-pods/pod-details-list";
-import { KubeObjectMeta } from "../kube-object-meta";
-import { ClusterMetricsResourceType } from "../../../common/cluster-types";
 import { NodeDetailsResources } from "./details-resources";
 import { DrawerTitle } from "../drawer/drawer-title";
-import logger from "../../../common/logger";
+import type { Logger } from "../../../common/logger";
 import { withInjectables } from "@ogre-tools/injectable-react";
 import type { SubscribeStores } from "../../kube-watch-api/kube-watch-api";
 import subscribeStoresInjectable from "../../kube-watch-api/subscribe-stores.injectable";
 import type { PodStore } from "../+workloads-pods/store";
 import podStoreInjectable from "../+workloads-pods/store.injectable";
-import type { GetActiveClusterEntity } from "../../api/catalog/entity/get-active-cluster-entity.injectable";
-import getActiveClusterEntityInjectable from "../../api/catalog/entity/get-active-cluster-entity.injectable";
+import loggerInjectable from "../../../common/logger.injectable";
+import loadPodsFromAllNamespacesInjectable from "../+workloads-pods/load-pods-from-all-namespaces.injectable";
 
 export interface NodeDetailsProps extends KubeObjectDetailsProps<Node> {
 }
@@ -37,38 +31,24 @@ export interface NodeDetailsProps extends KubeObjectDetailsProps<Node> {
 interface Dependencies {
   subscribeStores: SubscribeStores;
   podStore: PodStore;
-  getActiveClusterEntity: GetActiveClusterEntity;
+  logger: Logger;
+  loadPodsFromAllNamespaces: () => void;
 }
 
 @observer
 class NonInjectedNodeDetails extends React.Component<NodeDetailsProps & Dependencies> {
-  @observable metrics: Partial<ClusterMetricData> | null = null;
-
-  constructor(props: NodeDetailsProps & Dependencies) {
-    super(props);
-    makeObservable(this);
-  }
-
   componentDidMount() {
     disposeOnUnmount(this, [
-      reaction(() => this.props.object.getName(), () => {
-        this.metrics = null;
-      }),
-
       this.props.subscribeStores([
         this.props.podStore,
       ]),
     ]);
+
+    this.props.loadPodsFromAllNamespaces();
   }
 
-  loadMetrics = async () => {
-    const { object: node } = this.props;
-
-    this.metrics = await getMetricsByNodeNames([node.getName()]);
-  };
-
   render() {
-    const { object: node, podStore, getActiveClusterEntity } = this.props;
+    const { object: node, podStore, logger } = this.props;
 
     if (!node) {
       return null;
@@ -84,27 +64,9 @@ class NonInjectedNodeDetails extends React.Component<NodeDetailsProps & Dependen
     const conditions = node.getActiveConditions();
     const taints = node.getTaints();
     const childPods = podStore.getPodsByNode(node.getName());
-    const { metrics } = this;
-    const isMetricHidden = getActiveClusterEntity()?.isMetricHidden(ClusterMetricsResourceType.Node);
 
     return (
       <div className="NodeDetails">
-        {!isMetricHidden && podStore.isLoaded && (
-          <ResourceMetrics
-            loader={this.loadMetrics}
-            tabs={[
-              "CPU",
-              "Memory",
-              "Disk",
-              "Pods",
-            ]}
-            object={node}
-            metrics={metrics}
-          >
-            <NodeCharts/>
-          </ResourceMetrics>
-        )}
-        <KubeObjectMeta object={node} hideFields={["labels", "annotations", "uid", "resourceVersion", "selfLink"]}/>
         {addresses && (
           <DrawerItem name="Addresses">
             {
@@ -195,7 +157,8 @@ export const NodeDetails = withInjectables<Dependencies, NodeDetailsProps>(NonIn
     ...props,
     subscribeStores: di.inject(subscribeStoresInjectable),
     podStore: di.inject(podStoreInjectable),
-    getActiveClusterEntity: di.inject(getActiveClusterEntityInjectable),
+    logger: di.inject(loggerInjectable),
+    loadPodsFromAllNamespaces: di.inject(loadPodsFromAllNamespacesInjectable),
   }),
 });
 

@@ -14,7 +14,7 @@ import { ConfirmDialog } from "../confirm-dialog";
 import type { AsyncFnMock } from "@async-fn/jest";
 import asyncFn from "@async-fn/jest";
 import { getDiForUnitTesting } from "../../getDiForUnitTesting";
-import { computed } from "mobx";
+import { computed, runInAction } from "mobx";
 import clusterInjectable from "./dependencies/cluster.injectable";
 import type { DiRender } from "../test-utils/renderFor";
 import { renderFor } from "../test-utils/renderFor";
@@ -26,12 +26,6 @@ import createEditResourceTabInjectable from "../dock/edit-resource/edit-resource
 import hideDetailsInjectable from "../kube-detail-params/hide-details.injectable";
 import { kubeObjectMenuItemInjectionToken } from "./kube-object-menu-item-injection-token";
 
-// TODO: Make tooltips free of side effects by making it deterministic
-jest.mock("../tooltip/tooltip");
-jest.mock("../tooltip/withTooltip", () => ({
-  withTooltip: (target: any) => target,
-}));
-
 // TODO: make `animated={false}` not required to make tests deterministic
 describe("kube-object-menu", () => {
   let di: DiContainer;
@@ -40,11 +34,13 @@ describe("kube-object-menu", () => {
   beforeEach(() => {
     di = getDiForUnitTesting({ doGeneralOverrides: true });
 
-    di.register(
-      someMenuItemInjectable,
-      someOtherMenuItemInjectable,
-      someAnotherMenuItemInjectable,
-    );
+    runInAction(() => {
+      di.register(
+        someMenuItemInjectable,
+        someOtherMenuItemInjectable,
+        someAnotherMenuItemInjectable,
+      );
+    });
 
     render = renderFor(di);
 

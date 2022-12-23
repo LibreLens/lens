@@ -16,7 +16,6 @@ import type { HorizontalPodAutoscalerMetricSpec, HorizontalPodAutoscalerMetricTa
 import { HorizontalPodAutoscaler, HpaMetricType } from "../../../common/k8s-api/endpoints/horizontal-pod-autoscaler.api";
 import { Table, TableCell, TableHead, TableRow } from "../table";
 import type { ApiManager } from "../../../common/k8s-api/api-manager";
-import { KubeObjectMeta } from "../kube-object-meta";
 import logger from "../../../common/logger";
 import type { GetDetailsUrl } from "../kube-detail-params/get-details-url.injectable";
 import { withInjectables } from "@ogre-tools/injectable-react";
@@ -63,27 +62,13 @@ class NonInjectedHpaDetails extends React.Component<HpaDetailsProps & Dependenci
         case HpaMetricType.Resource: {
           const metricSpec = metric.resource ?? metric.containerResource;
           const addition = metricSpec.targetAverageUtilization
-            ? "(as a percentage of request)"
+            ? " (as a percentage of request)"
             : "";
 
-          return (
-            <>
-              Resource
-              {metricSpec.name}
-              {" "}
-              on Pods
-              {addition}
-            </>
-          );
+          return `Resource ${metricSpec.name} on Pods${addition}`;
         }
         case HpaMetricType.Pods:
-          return (
-            <>
-              {metric.pods.metricName}
-              {" "}
-              on Pods
-            </>
-          );
+          return `${metric.pods.metricName} on Pods`;
 
         case HpaMetricType.Object: {
           return (
@@ -95,15 +80,7 @@ class NonInjectedHpaDetails extends React.Component<HpaDetailsProps & Dependenci
           );
         }
         case HpaMetricType.External:
-          return (
-            <>
-              {metric.external.metricName}
-              {" "}
-              on
-              {" "}
-              {JSON.stringify(metric.external.metricSelector)}
-            </>
-          );
+          return `${metric.external.metricName} on ${JSON.stringify(metric.external.metricSelector)}`;
       }
     };
 
@@ -143,8 +120,6 @@ class NonInjectedHpaDetails extends React.Component<HpaDetailsProps & Dependenci
 
     return (
       <div className="HpaDetails">
-        <KubeObjectMeta object={hpa}/>
-
         <DrawerItem name="Reference">
           {scaleTargetRef && (
             <Link to={getDetailsUrl(apiManager.lookupApiLink(scaleTargetRef, hpa))}>

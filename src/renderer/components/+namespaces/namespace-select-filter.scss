@@ -20,6 +20,7 @@
       padding-left: 8px;
       margin-right: -8px;
       padding-right: 8px;
+      line-height: 1.1;
 
       &::-webkit-scrollbar {
         display: none;
@@ -32,7 +33,6 @@
       &::before, &::after {
         content: ' ';
         position: absolute;
-        z-index: 20;
         display: block;
         width: 8px;
         height: var(--font-size);

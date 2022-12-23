@@ -3,22 +3,20 @@
  * Licensed under MIT License. See LICENSE in root directory for more information.
  */
 import { getInjectable, lifecycleEnum } from "@ogre-tools/injectable";
-import type { IObservableValue } from "mobx";
+import type { IComputedValue, IObservableValue } from "mobx";
 import { runInAction, action, observable, computed } from "mobx";
 import type { TargetHelmRelease } from "../target-helm-release.injectable";
-import type { CallForHelmRelease, DetailedHelmRelease } from "./call-for-helm-release/call-for-helm-release.injectable";
-import callForHelmReleaseInjectable from "./call-for-helm-release/call-for-helm-release.injectable";
-import type { ThemeStore } from "../../../../themes/store";
-import themeStoreInjectable from "../../../../themes/store.injectable";
-import type { CallForHelmReleaseConfiguration } from "./call-for-helm-release-configuration/call-for-helm-release-configuration.injectable";
-import callForHelmReleaseConfigurationInjectable from "./call-for-helm-release-configuration/call-for-helm-release-configuration.injectable";
-import { toHelmRelease } from "../../releases.injectable";
+import type { RequestDetailedHelmRelease, DetailedHelmRelease } from "./request-detailed-helm-release.injectable";
+import requestDetailedHelmReleaseInjectable from "./request-detailed-helm-release.injectable";
+import type { LensTheme } from "../../../../themes/lens-theme";
+import type { RequestHelmReleaseConfiguration } from "../../../../../common/k8s-api/endpoints/helm-releases.api/request-configuration.injectable";
+import requestHelmReleaseConfigurationInjectable from "../../../../../common/k8s-api/endpoints/helm-releases.api/request-configuration.injectable";
 import { pipeline } from "@ogre-tools/fp";
 import { groupBy, map } from "lodash/fp";
 import type { KubeJsonApiData } from "../../../../../common/k8s-api/kube-json-api";
 import type { GetResourceDetailsUrl } from "./get-resource-details-url.injectable";
 import getResourceDetailsUrlInjectable from "./get-resource-details-url.injectable";
-import type { CallForHelmReleaseUpdate } from "../../update-release/call-for-helm-release-update/call-for-helm-release-update.injectable";
+import type { RequestHelmReleaseUpdate } from "../../../../../common/k8s-api/endpoints/helm-releases.api/request-update.injectable";
 import updateReleaseInjectable from "../../update-release/update-release.injectable";
 import type { ShowCheckedErrorNotification } from "../../../notifications/show-checked-error.injectable";
 import showCheckedErrorNotificationInjectable from "../../../notifications/show-checked-error.injectable";
@@ -30,86 +28,75 @@ import type { HelmRelease } from "../../../../../common/k8s-api/endpoints/helm-r
 import type { NavigateToHelmReleases } from "../../../../../common/front-end-routing/routes/cluster/helm/releases/navigate-to-helm-releases.injectable";
 import navigateToHelmReleasesInjectable from "../../../../../common/front-end-routing/routes/cluster/helm/releases/navigate-to-helm-releases.injectable";
 import assert from "assert";
-import withOrphanPromiseInjectable from "../../../../../common/utils/with-orphan-promise/with-orphan-promise.injectable";
+import activeThemeInjectable from "../../../../themes/active.injectable";
+import type { ToHelmRelease } from "../../to-helm-release.injectable";
+import toHelmReleaseInjectable from "../../to-helm-release.injectable";
 
 const releaseDetailsModelInjectable = getInjectable({
   id: "release-details-model",
 
-  instantiate: (di, targetRelease: TargetHelmRelease) => {
-    const callForHelmRelease = di.inject(callForHelmReleaseInjectable);
-    const callForHelmReleaseConfiguration = di.inject(callForHelmReleaseConfigurationInjectable);
-    const themeStore = di.inject(themeStoreInjectable);
-    const getResourceDetailsUrl = di.inject(getResourceDetailsUrlInjectable);
-    const updateRelease = di.inject(updateReleaseInjectable);
-    const showCheckedErrorNotification = di.inject(showCheckedErrorNotificationInjectable);
-    const showSuccessNotification = di.inject(showSuccessNotificationInjectable);
-    const createUpgradeChartTab = di.inject(createUpgradeChartTabInjectable);
-    const navigateToHelmReleases = di.inject(navigateToHelmReleasesInjectable);
-    const withOrphanPromise = di.inject(withOrphanPromiseInjectable);
-
+  instantiate: async (di, targetRelease: TargetHelmRelease) => {
     const model = new ReleaseDetailsModel({
-      callForHelmRelease,
+      requestDetailedHelmRelease: di.inject(requestDetailedHelmReleaseInjectable),
       targetRelease,
-      themeStore,
-      callForHelmReleaseConfiguration,
-      getResourceDetailsUrl,
-      updateRelease,
-      showCheckedErrorNotification,
-      showSuccessNotification,
-      createUpgradeChartTab,
-      navigateToHelmReleases,
+      activeTheme: di.inject(activeThemeInjectable),
+      requestHelmReleaseConfiguration: di.inject(requestHelmReleaseConfigurationInjectable),
+      getResourceDetailsUrl: di.inject(getResourceDetailsUrlInjectable),
+      updateRelease: di.inject(updateReleaseInjectable),
+      showCheckedErrorNotification: di.inject(showCheckedErrorNotificationInjectable),
+      showSuccessNotification: di.inject(showSuccessNotificationInjectable),
+      createUpgradeChartTab: di.inject(createUpgradeChartTabInjectable),
+      navigateToHelmReleases: di.inject(navigateToHelmReleasesInjectable),
+      toHelmRelease: di.inject(toHelmReleaseInjectable),
     });
 
-    const load = withOrphanPromise(model.load);
-
-    // TODO: Reorganize Drawer to allow setting of header-bar in children to make "getPlaceholder" from injectable usable.
-    load();
+    await model.load();
 
     return model;
   },
 
   lifecycle: lifecycleEnum.keyedSingleton({
-    getInstanceKey: (di, release: TargetHelmRelease) =>
-      `${release.namespace}/${release.name}`,
+    getInstanceKey: (di, release: TargetHelmRelease) => `${release.namespace}/${release.name}`,
   }),
 });
 
 export default releaseDetailsModelInjectable;
 
 export interface OnlyUserSuppliedValuesAreShownToggle {
-  value: IObservableValue<boolean>;
+  readonly value: IObservableValue<boolean>;
   toggle: () => Promise<void>;
 }
 
 export interface ConfigurationInput {
-  nonSavedValue: IObservableValue<string>;
-  isLoading: IObservableValue<boolean>;
-  isSaving: IObservableValue<boolean>;
+  readonly nonSavedValue: IObservableValue<string>;
+  readonly isLoading: IObservableValue<boolean>;
+  readonly isSaving: IObservableValue<boolean>;
   onChange: (value: string) => void;
   save: () => Promise<void>;
 }
 
 interface Dependencies {
-  callForHelmRelease: CallForHelmRelease;
-  targetRelease: TargetHelmRelease;
-  themeStore: ThemeStore;
-  callForHelmReleaseConfiguration: CallForHelmReleaseConfiguration;
+  readonly targetRelease: TargetHelmRelease;
+  readonly activeTheme: IComputedValue<LensTheme>;
+  requestDetailedHelmRelease: RequestDetailedHelmRelease;
+  requestHelmReleaseConfiguration: RequestHelmReleaseConfiguration;
   getResourceDetailsUrl: GetResourceDetailsUrl;
-  updateRelease: CallForHelmReleaseUpdate;
+  updateRelease: RequestHelmReleaseUpdate;
   showCheckedErrorNotification: ShowCheckedErrorNotification;
   showSuccessNotification: ShowNotification;
   createUpgradeChartTab: (release: HelmRelease) => string;
   navigateToHelmReleases: NavigateToHelmReleases;
+  toHelmRelease: ToHelmRelease;
 }
 
 export class ReleaseDetailsModel {
-  id = `${this.dependencies.targetRelease.namespace}/${this.dependencies.targetRelease.name}`;
+  readonly id = `${this.dependencies.targetRelease.namespace}/${this.dependencies.targetRelease.name}`;
 
-  constructor(private dependencies: Dependencies) {}
+  constructor(protected readonly dependencies: Dependencies) {}
 
-  private detailedRelease = observable.box<DetailedHelmRelease | undefined>();
+  private readonly detailedRelease = observable.box<DetailedHelmRelease | undefined>();
 
-  readonly isLoading = observable.box(false);
+  readonly loadingError = observable.box<string>();
 
   readonly configuration: ConfigurationInput = {
     nonSavedValue: observable.box(""),
@@ -141,7 +128,7 @@ export class ReleaseDetailsModel {
         this.configuration.isSaving.set(false);
       });
 
-      if (!result.updateWasSuccessful) {
+      if (!result.callWasSuccessful) {
         this.dependencies.showCheckedErrorNotification(
           result.error,
           "Unknown error occured while updating release",
@@ -176,26 +163,26 @@ export class ReleaseDetailsModel {
   };
 
   load = async () => {
-    runInAction(() => {
-      this.isLoading.set(true);
-    });
-
     const { name, namespace } = this.dependencies.targetRelease;
 
-    const detailedRelease = await this.dependencies.callForHelmRelease(
+    const result = await this.dependencies.requestDetailedHelmRelease(
       name,
       namespace,
     );
 
+    if (!result.callWasSuccessful) {
+      runInAction(() => {
+        this.loadingError.set(result.error);
+      });
+
+      return;
+    }
+
     runInAction(() => {
-      this.detailedRelease.set(detailedRelease);
+      this.detailedRelease.set(result.response);
     });
 
     await this.loadConfiguration();
-
-    runInAction(() => {
-      this.isLoading.set(false);
-    });
   };
 
   private loadConfiguration = async () => {
@@ -206,7 +193,7 @@ export class ReleaseDetailsModel {
     const { name, namespace } = this.release;
 
     const configuration =
-      await this.dependencies.callForHelmReleaseConfiguration(
+      await this.dependencies.requestHelmReleaseConfiguration(
         name,
         namespace,
         !this.onlyUserSuppliedValuesAreShown.value.get(),
@@ -223,7 +210,7 @@ export class ReleaseDetailsModel {
 
     assert(detailedRelease, "Tried to access release before load");
 
-    return toHelmRelease(detailedRelease.release);
+    return this.dependencies.toHelmRelease(detailedRelease.release);
   }
 
   @computed private get details() {
@@ -235,12 +222,12 @@ export class ReleaseDetailsModel {
   }
 
   @computed get notes() {
-    return this.details.info.notes;
+    return this.details?.info.notes ?? "";
   }
 
   @computed get groupedResources(): MinimalResourceGroup[] {
     return pipeline(
-      this.details.resources,
+      this.details?.resources ?? [],
       groupBy((resource) => resource.kind),
       (grouped) => Object.entries(grouped),
 
@@ -259,7 +246,7 @@ export class ReleaseDetailsModel {
   }
 
   @computed get activeTheme() {
-    return this.dependencies.themeStore.activeTheme.type;
+    return this.dependencies.activeTheme.get().type;
   }
 
   close = () => {
@@ -269,7 +256,7 @@ export class ReleaseDetailsModel {
   startUpgradeProcess = () => {
     this.dependencies.createUpgradeChartTab(this.release);
 
-    this.close();
+    this.dependencies.navigateToHelmReleases();
   };
 }
 
@@ -284,20 +271,17 @@ export interface MinimalResource {
   name: string;
   namespace: string | undefined;
   detailsUrl: string | undefined;
-  creationTimestamp: string | undefined;
 }
 
 const toMinimalResourceFor =
   (getResourceDetailsUrl: GetResourceDetailsUrl, kind: string) =>
     (resource: KubeJsonApiData): MinimalResource => {
-      const { creationTimestamp, name, namespace, uid } = resource.metadata;
+      const { name, namespace, uid } = resource.metadata;
 
       return {
         uid,
         name,
         namespace,
-        creationTimestamp,
-
         detailsUrl: getResourceDetailsUrl(
           kind,
           resource.apiVersion,

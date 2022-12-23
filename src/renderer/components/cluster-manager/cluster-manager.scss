@@ -19,10 +19,15 @@
     position: relative;
     display: flex;
     flex-direction: column;
+    overflow-y: auto;
   }
 
   .HotbarMenu {
     grid-area: menu;
+  }
+
+  .error {
+    z-index: var(--z-index-base);
   }
 
   #lens-views {

@@ -18,10 +18,10 @@ const getHelmEnvInjectable = getInjectable({
     const execHelm = di.inject(execHelmInjectable);
 
     return async (): Promise<AsyncResult<HelmEnv>> => {
-      const result = await execHelm("env");
+      const result = await execHelm(["env"]);
 
       if (!result.callWasSuccessful) {
-        return { callWasSuccessful: false, error: result.error };
+        return { callWasSuccessful: false, error: result.error.stderr };
       }
 
       const lines = result.response.split(/\r?\n/); // split by new line feed

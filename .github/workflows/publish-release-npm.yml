@@ -1,8 +1,16 @@
 name: Publish NPM Package Release
 on:
-  release:
-    types:
-      - published
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      version:
+        required: true
+        type: string
+        description: The version to release manually
 jobs:
   publish:
     name: Publish NPM Package Release
@@ -12,22 +20,22 @@ jobs:
         node-version: [16.x]
     steps:
       - name: Checkout Release
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
+          ref: ${{ inputs.version }}
 
       - name: Using Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v1
+        uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node-version }}
 
       - name: Generate NPM package
         run: |
-           make build-npm
+          make build-npm
 
       - name: publish new release
-        if: contains(github.ref, 'refs/tags/v')
         run: |
-           make publish-npm
+          make publish-npm
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

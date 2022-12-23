@@ -3,28 +3,23 @@
  * Licensed under MIT License. See LICENSE in root directory for more information.
  */
 import type { AppPaths } from "./app-path-injection-token";
-import { appPathsInjectionToken } from "./app-path-injection-token";
 import getElectronAppPathInjectable from "../../main/app-paths/get-electron-app-path/get-electron-app-path.injectable";
 import type { PathName } from "./app-path-names";
 import setElectronAppPathInjectable from "../../main/app-paths/set-electron-app-path/set-electron-app-path.injectable";
-import appNameInjectable from "../../main/app-paths/app-name/app-name.injectable";
 import directoryForIntegrationTestingInjectable from "../../main/app-paths/directory-for-integration-testing/directory-for-integration-testing.injectable";
 import type { ApplicationBuilder } from "../../renderer/components/test-utils/get-application-builder";
 import { getApplicationBuilder } from "../../renderer/components/test-utils/get-application-builder";
 import type { DiContainer } from "@ogre-tools/injectable";
+import appPathsInjectable from "./app-paths.injectable";
 
 describe("app-paths", () => {
-  let applicationBuilder: ApplicationBuilder;
-  let rendererDi: DiContainer;
-  let mainDi: DiContainer;
+  let builder: ApplicationBuilder;
 
   beforeEach(() => {
-    applicationBuilder = getApplicationBuilder();
-
-    rendererDi = applicationBuilder.dis.rendererDi;
-    mainDi = applicationBuilder.dis.mainDi;
+    builder = getApplicationBuilder();
 
     const defaultAppPathsStub: AppPaths = {
+      currentApp: "some-current-app",
       appData: "some-app-data",
       cache: "some-cache",
       crashDumps: "some-crash-dumps",
@@ -43,7 +38,7 @@ describe("app-paths", () => {
       userData: "some-irrelevant-user-data",
     };
 
-    applicationBuilder.beforeApplicationStart(({ mainDi }) => {
+    builder.beforeApplicationStart((mainDi) => {
       mainDi.override(
         getElectronAppPathInjectable,
         () =>
@@ -58,20 +53,25 @@ describe("app-paths", () => {
             defaultAppPathsStub[key] = path;
           },
       );
-
-      mainDi.override(appNameInjectable, () => "some-app-name");
     });
   });
 
   describe("normally", () => {
+    let windowDi: DiContainer;
+    let mainDi: DiContainer;
+
     beforeEach(async () => {
-      await applicationBuilder.render();
+      await builder.render();
+
+      windowDi = builder.applicationWindow.only.di;
+      mainDi = builder.mainDi;
     });
 
     it("given in renderer, when injecting app paths, returns application specific app paths", () => {
-      const actual = rendererDi.inject(appPathsInjectionToken);
+      const actual = windowDi.inject(appPathsInjectable);
 
       expect(actual).toEqual({
+        currentApp: "some-current-app",
         appData: "some-app-data",
         cache: "some-cache",
         crashDumps: "some-crash-dumps",
@@ -87,14 +87,15 @@ describe("app-paths", () => {
         recent: "some-recent",
         temp: "some-temp",
         videos: "some-videos",
-        userData: "some-app-data/some-app-name",
+        userData: "some-app-data/some-product-name",
       });
     });
 
     it("given in main, when injecting app paths, returns application specific app paths", () => {
-      const actual = mainDi.inject(appPathsInjectionToken);
+      const actual = mainDi.inject(appPathsInjectable);
 
       expect(actual).toEqual({
+        currentApp: "some-current-app",
         appData: "some-app-data",
         cache: "some-cache",
         crashDumps: "some-crash-dumps",
@@ -110,38 +111,42 @@ describe("app-paths", () => {
         recent: "some-recent",
         temp: "some-temp",
         videos: "some-videos",
-        userData: "some-app-data/some-app-name",
+        userData: "some-app-data/some-product-name",
       });
     });
   });
 
   describe("when running integration tests", () => {
+    let windowDi: DiContainer;
+
     beforeEach(async () => {
-      applicationBuilder.beforeApplicationStart(({ mainDi }) => {
+      builder.beforeApplicationStart((mainDi) => {
         mainDi.override(
           directoryForIntegrationTestingInjectable,
           () => "some-integration-testing-app-data",
         );
       });
 
-      await applicationBuilder.render();
+      await builder.render();
+
+      windowDi = builder.applicationWindow.only.di;
     });
 
     it("given in renderer, when injecting path for app data, has integration specific app data path", () => {
-      const { appData, userData } = rendererDi.inject(appPathsInjectionToken);
+      const { appData, userData } = windowDi.inject(appPathsInjectable);
 
       expect({ appData, userData }).toEqual({
         appData: "some-integration-testing-app-data",
-        userData: `some-integration-testing-app-data/some-app-name`,
+        userData: `some-integration-testing-app-data/some-product-name`,
       });
     });
 
     it("given in main, when injecting path for app data, has integration specific app data path", () => {
-      const { appData, userData } = rendererDi.inject(appPathsInjectionToken);
+      const { appData, userData } = windowDi.inject(appPathsInjectable);
 
       expect({ appData, userData }).toEqual({
         appData: "some-integration-testing-app-data",
-        userData: "some-integration-testing-app-data/some-app-name",
+        userData: "some-integration-testing-app-data/some-product-name",
       });
     });
   });

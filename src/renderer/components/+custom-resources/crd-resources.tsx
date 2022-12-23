@@ -11,7 +11,7 @@ import { KubeObjectListLayout } from "../kube-object-list-layout";
 import type { IComputedValue } from "mobx";
 import { computed, makeObservable } from "mobx";
 import type { ApiManager } from "../../../common/k8s-api/api-manager";
-import { safeJSONPathValue } from "../../utils/jsonPath";
+import { formatJSONValue, safeJSONPathValue } from "../../utils/jsonPath";
 import { TabLayout } from "../layout/tab-layout-2";
 import { withInjectables } from "@ogre-tools/injectable-react";
 import customResourcesRouteParametersInjectable from "./custom-resources-route-parameters.injectable";
@@ -19,6 +19,9 @@ import { KubeObjectAge } from "../kube-object/age";
 import type { CustomResourceDefinitionStore } from "./definition.store";
 import apiManagerInjectable from "../../../common/k8s-api/api-manager/manager.injectable";
 import customResourceDefinitionStoreInjectable from "./definition.store.injectable";
+import { prevDefault } from "../../utils";
+import type { FilterByNamespace } from "../+namespaces/namespace-select-filter-model/filter-by-namespace.injectable";
+import filterByNamespaceInjectable from "../+namespaces/namespace-select-filter-model/filter-by-namespace.injectable";
 
 enum columnId {
   name = "name",
@@ -31,6 +34,7 @@ interface Dependencies {
   name: IComputedValue<string>;
   apiManager: ApiManager;
   customResourceDefinitionStore: CustomResourceDefinitionStore;
+  filterByNamespace: FilterByNamespace;
 }
 
 @observer
@@ -73,7 +77,7 @@ class NonInjectedCustomResources extends React.Component<Dependencies> {
             [columnId.age]: customResource => -customResource.getCreationTimestamp(),
             ...Object.fromEntries(extraColumns.map(({ name, jsonPath }) => [
               name,
-              customResource => safeJSONPathValue(customResource, jsonPath),
+              customResource => formatJSONValue(safeJSONPathValue(customResource, jsonPath)),
             ])),
           }}
           searchFilters={[
@@ -102,7 +106,15 @@ class NonInjectedCustomResources extends React.Component<Dependencies> {
           ]}
           renderTableContents={customResource => [
             customResource.getName(),
-            isNamespaced && customResource.getNs(),
+            isNamespaced && (
+              <a
+                key="namespace"
+                className="filterNamespace"
+                onClick={prevDefault(() => this.props.filterByNamespace(customResource.getNs() as string))}
+              >
+                {customResource.getNs()}
+              </a>
+            ),
             ...extraColumns.map((column) => safeJSONPathValue(customResource, column.jsonPath)),
             <KubeObjectAge key="age" object={customResource} />,
           ]}
@@ -129,6 +141,7 @@ export const CustomResources = withInjectables<Dependencies>(NonInjectedCustomRe
     ...di.inject(customResourcesRouteParametersInjectable),
     apiManager: di.inject(apiManagerInjectable),
     customResourceDefinitionStore: di.inject(customResourceDefinitionStoreInjectable),
+    filterByNamespace: di.inject(filterByNamespaceInjectable),
   }),
 });
 

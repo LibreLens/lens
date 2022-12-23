@@ -4,77 +4,67 @@
  */
 import type { DiContainer } from "@ogre-tools/injectable";
 import { getInjectable } from "@ogre-tools/injectable";
-import type { LensWindow } from "../../../main/start-main-application/lens-window/application-window/lens-window-injection-token";
-import { lensWindowInjectionToken } from "../../../main/start-main-application/lens-window/application-window/lens-window-injection-token";
-import type { MessageToChannel } from "./message-to-channel-injection-token";
-import { messageToChannelInjectionToken } from "./message-to-channel-injection-token";
+import type { SendMessageToChannel } from "./message-to-channel-injection-token";
+import { sendMessageToChannelInjectionToken } from "./message-to-channel-injection-token";
+import type { ApplicationBuilder } from "../../../renderer/components/test-utils/get-application-builder";
 import { getApplicationBuilder } from "../../../renderer/components/test-utils/get-application-builder";
-import createLensWindowInjectable from "../../../main/start-main-application/lens-window/application-window/create-lens-window.injectable";
-import closeAllWindowsInjectable from "../../../main/start-main-application/lens-window/hide-all-windows/close-all-windows.injectable";
+import type { LensWindow } from "../../../main/start-main-application/lens-window/application-window/create-lens-window.injectable";
+import type { MessageChannel } from "./message-channel-listener-injection-token";
 import { messageChannelListenerInjectionToken } from "./message-channel-listener-injection-token";
-import type { MessageChannel } from "./message-channel-injection-token";
 import type { RequestFromChannel } from "./request-from-channel-injection-token";
 import { requestFromChannelInjectionToken } from "./request-from-channel-injection-token";
-import type { RequestChannel } from "./request-channel-injection-token";
-import { requestChannelListenerInjectionToken } from "./request-channel-listener-injection-token";
+import type { RequestChannel } from "./request-channel-listener-injection-token";
 import type { AsyncFnMock } from "@async-fn/jest";
 import asyncFn from "@async-fn/jest";
 import { getPromiseStatus } from "../../test-utils/get-promise-status";
+import { runInAction } from "mobx";
+import type { RequestChannelHandler } from "../../../main/utils/channel/channel-listeners/listener-tokens";
+import { getRequestChannelListenerInjectable } from "../../../main/utils/channel/channel-listeners/listener-tokens";
 
 type TestMessageChannel = MessageChannel<string>;
 type TestRequestChannel = RequestChannel<string, string>;
 
 describe("channel", () => {
   describe("messaging from main to renderer, given listener for channel in a window and application has started", () => {
-    let testMessageChannel: TestMessageChannel;
     let messageListenerInWindowMock: jest.Mock;
     let mainDi: DiContainer;
-    let messageToChannel: MessageToChannel;
+    let messageToChannel: SendMessageToChannel;
+    let builder: ApplicationBuilder;
 
     beforeEach(async () => {
-      const applicationBuilder = getApplicationBuilder();
-
-      mainDi = applicationBuilder.dis.mainDi;
-      const rendererDi = applicationBuilder.dis.rendererDi;
+      builder = getApplicationBuilder();
 
       messageListenerInWindowMock = jest.fn();
 
       const testChannelListenerInTestWindowInjectable = getInjectable({
         id: "test-channel-listener-in-test-window",
 
-        instantiate: (di) => ({
-          channel: di.inject(testMessageChannelInjectable),
-
+        instantiate: () => ({
+          channel: testMessageChannel,
           handler: messageListenerInWindowMock,
         }),
 
         injectionToken: messageChannelListenerInjectionToken,
       });
 
-      rendererDi.register(testChannelListenerInTestWindowInjectable);
+      builder.beforeWindowStart((windowDi) => {
+        runInAction(() => {
+          windowDi.register(testChannelListenerInTestWindowInjectable);
+        });
+      });
 
-      // Notice how test channel has presence in both DIs, being from common
-      mainDi.register(testMessageChannelInjectable);
-      rendererDi.register(testMessageChannelInjectable);
+      mainDi = builder.mainDi;
 
-      testMessageChannel = mainDi.inject(testMessageChannelInjectable);
+      await builder.startHidden();
 
-      messageToChannel = mainDi.inject(
-        messageToChannelInjectionToken,
-      );
-
-      await applicationBuilder.render();
-
-      const closeAllWindows = mainDi.inject(closeAllWindowsInjectable);
-
-      closeAllWindows();
+      messageToChannel = mainDi.inject(sendMessageToChannelInjectionToken);
     });
 
     describe("given window is started", () => {
       let someWindowFake: LensWindow;
 
       beforeEach(async () => {
-        someWindowFake = createTestWindow(mainDi, "some-window");
+        someWindowFake = builder.applicationWindow.create("some-window");
 
         await someWindowFake.start();
       });
@@ -95,8 +85,8 @@ describe("channel", () => {
     });
 
     it("given multiple started windows, when sending message, triggers listeners in all windows", async () => {
-      const someWindowFake = createTestWindow(mainDi, "some-window");
-      const someOtherWindowFake = createTestWindow(mainDi, "some-other-window");
+      const someWindowFake = builder.applicationWindow.create("some-window");
+      const someOtherWindowFake = builder.applicationWindow.create("some-other-window");
 
       await someWindowFake.start();
       await someOtherWindowFake.start();
@@ -111,45 +101,36 @@ describe("channel", () => {
   });
 
   describe("messaging from renderer to main, given listener for channel in a main and application has started", () => {
-    let testMessageChannel: TestMessageChannel;
     let messageListenerInMainMock: jest.Mock;
-    let rendererDi: DiContainer;
-    let mainDi: DiContainer;
-    let messageToChannel: MessageToChannel;
+    let messageToChannel: SendMessageToChannel;
 
     beforeEach(async () => {
       const applicationBuilder = getApplicationBuilder();
-
-      mainDi = applicationBuilder.dis.mainDi;
-      rendererDi = applicationBuilder.dis.rendererDi;
 
       messageListenerInMainMock = jest.fn();
 
       const testChannelListenerInMainInjectable = getInjectable({
         id: "test-channel-listener-in-main",
 
-        instantiate: (di) => ({
-          channel: di.inject(testMessageChannelInjectable),
-
+        instantiate: () => ({
+          channel: testMessageChannel,
           handler: messageListenerInMainMock,
         }),
 
         injectionToken: messageChannelListenerInjectionToken,
       });
 
-      mainDi.register(testChannelListenerInMainInjectable);
-
-      // Notice how test channel has presence in both DIs, being from common
-      mainDi.register(testMessageChannelInjectable);
-      rendererDi.register(testMessageChannelInjectable);
-
-      testMessageChannel = rendererDi.inject(testMessageChannelInjectable);
-
-      messageToChannel = rendererDi.inject(
-        messageToChannelInjectionToken,
-      );
+      applicationBuilder.beforeApplicationStart((mainDi) => {
+        runInAction(() => {
+          mainDi.register(testChannelListenerInMainInjectable);
+        });
+      });
 
       await applicationBuilder.render();
+
+      const windowDi = applicationBuilder.applicationWindow.only.di;
+
+      messageToChannel = windowDi.inject(sendMessageToChannelInjectionToken);
     });
 
     it("when sending message, triggers listener in main", () => {
@@ -160,45 +141,32 @@ describe("channel", () => {
   });
 
   describe("requesting from main in renderer, given listener for channel in a main and application has started", () => {
-    let testRequestChannel: TestRequestChannel;
-    let requestListenerInMainMock: AsyncFnMock<(arg: string) => string>;
-    let rendererDi: DiContainer;
-    let mainDi: DiContainer;
+    let requestListenerInMainMock: AsyncFnMock<RequestChannelHandler<TestRequestChannel>>;
     let requestFromChannel: RequestFromChannel;
 
     beforeEach(async () => {
       const applicationBuilder = getApplicationBuilder();
 
-      mainDi = applicationBuilder.dis.mainDi;
-      rendererDi = applicationBuilder.dis.rendererDi;
-
       requestListenerInMainMock = asyncFn();
 
-      const testChannelListenerInMainInjectable = getInjectable({
-        id: "test-channel-listener-in-main",
-
-        instantiate: (di) => ({
-          channel: di.inject(testRequestChannelInjectable),
-
-          handler: requestListenerInMainMock,
-        }),
-
-        injectionToken: requestChannelListenerInjectionToken,
+      const testChannelListenerInMainInjectable = getRequestChannelListenerInjectable({
+        channel: testRequestChannel,
+        handler: () => requestListenerInMainMock,
       });
 
-      mainDi.register(testChannelListenerInMainInjectable);
-
-      // Notice how test channel has presence in both DIs, being from common
-      mainDi.register(testRequestChannelInjectable);
-      rendererDi.register(testRequestChannelInjectable);
-
-      testRequestChannel = rendererDi.inject(testRequestChannelInjectable);
-
-      requestFromChannel = rendererDi.inject(
-        requestFromChannelInjectionToken,
-      );
+      applicationBuilder.beforeApplicationStart((mainDi) => {
+        runInAction(() => {
+          mainDi.register(testChannelListenerInMainInjectable);
+        });
+      });
 
       await applicationBuilder.render();
+
+      const windowDi = applicationBuilder.applicationWindow.only.di;
+
+      requestFromChannel = windowDi.inject(
+        requestFromChannelInjectionToken,
+      );
     });
 
     describe("when requesting from channel", () => {
@@ -227,47 +195,37 @@ describe("channel", () => {
       });
     });
   });
-});
 
-const testMessageChannelInjectable = getInjectable({
-  id: "some-message-test-channel",
+  it("when registering multiple handlers for the same channel, throws", async () => {
+    const applicationBuilder = getApplicationBuilder();
 
-  instantiate: (): TestMessageChannel => ({
-    id: "some-message-channel-id",
-  }),
-});
+    const testChannelListenerInMainInjectable = getRequestChannelListenerInjectable({
+      channel: testRequestChannel,
+      handler: () => () => "some-value",
+    });
+    const testChannelListenerInMain2Injectable = getRequestChannelListenerInjectable({
+      channel: testRequestChannel,
+      handler: () => () => "some-other-value",
+    });
 
-const testRequestChannelInjectable = getInjectable({
-  id: "some-request-test-channel",
+    testChannelListenerInMain2Injectable.id += "2";
 
-  instantiate: (): TestRequestChannel => ({
-    id: "some-request-channel-id",
-  }),
-});
-
-const createTestWindow = (di: DiContainer, id: string) => {
-  const testWindowInjectable = getInjectable({
-    id,
-
-    instantiate: (di) => {
-      const createLensWindow = di.inject(createLensWindowInjectable);
-
-      return createLensWindow({
-        id,
-        title: "Some test window",
-        defaultHeight: 42,
-        defaultWidth: 42,
-        getContentSource: () => ({ url: "some-content-url" }),
-        resizable: true,
-        windowFrameUtilitiesAreShown: false,
-        centered: false,
+    applicationBuilder.beforeApplicationStart((mainDi) => {
+      runInAction(() => {
+        mainDi.register(testChannelListenerInMainInjectable);
+        mainDi.register(testChannelListenerInMain2Injectable);
       });
-    },
+    });
 
-    injectionToken: lensWindowInjectionToken,
+    await expect(applicationBuilder.render()).rejects.toThrow('Tried to register a multiple channel handlers for "some-request-channel-id", only one handler is supported for a request channel.');
   });
+});
 
-  di.register(testWindowInjectable);
-
-  return di.inject(testWindowInjectable);
+const testMessageChannel: TestMessageChannel = {
+  id: "some-message-channel-id",
 };
+
+const testRequestChannel: TestRequestChannel = {
+  id: "some-request-channel-id",
+};
+

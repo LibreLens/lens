@@ -4,25 +4,20 @@
  */
 import type { Cluster } from "../../../../common/cluster/cluster";
 import type { CatalogEntityRegistry } from "../../../api/catalog/entity/registry";
-import logger from "../../../../main/logger";
-import type { KubernetesCluster } from "../../../../common/catalog-entities";
-import { Notifications } from "../../../components/notifications";
-import type { AppEvent } from "../../../../common/app-event-bus/event-bus";
-import type { CatalogEntity } from "../../../../common/catalog";
+import type { ShowNotification } from "../../../components/notifications";
 import { when } from "mobx";
-import type { ClusterFrameContext } from "../../../cluster-frame-context/cluster-frame-context";
-import { KubeObjectStore } from "../../../../common/k8s-api/kube-object.store";
 import { requestSetClusterFrameId } from "../../../ipc";
+import type { EmitAppEvent } from "../../../../common/app-event-bus/emit-event.injectable";
+import type { Logger } from "../../../../common/logger";
 
 interface Dependencies {
   hostedCluster: Cluster;
-  loadExtensions: (getCluster: () => CatalogEntity) => void;
+  loadExtensions: () => void;
   catalogEntityRegistry: CatalogEntityRegistry;
   frameRoutingId: number;
-  emitEvent: (event: AppEvent) => void;
-
-  // TODO: This dependency belongs to KubeObjectStore
-  clusterFrameContext: ClusterFrameContext;
+  emitAppEvent: EmitAppEvent;
+  logger: Logger;
+  showErrorNotification: ShowNotification;
 }
 
 const logPrefix = "[CLUSTER-FRAME]:";
@@ -32,8 +27,9 @@ export const initClusterFrame = ({
   loadExtensions,
   catalogEntityRegistry,
   frameRoutingId,
-  emitEvent,
-  clusterFrameContext,
+  emitAppEvent,
+  logger,
+  showErrorNotification,
 }: Dependencies) =>
   async (unmountRoot: () => void) => {
     // TODO: Make catalogEntityRegistry already initialized when passed as dependency
@@ -53,24 +49,22 @@ export const initClusterFrame = ({
     when(
       () => catalogEntityRegistry.items.get().length > 0,
       () =>
-        loadExtensions(() => catalogEntityRegistry.activeEntity as KubernetesCluster),
+        loadExtensions(),
       {
         timeout: 15_000,
         onError: (error) => {
-          console.warn(
+          logger.warn(
             "[CLUSTER-FRAME]: error from activeEntity when()",
             error,
           );
 
-          Notifications.error(
-            "Failed to get KubernetesCluster for this view. Extensions will not be loaded.",
-          );
+          showErrorNotification("Failed to get KubernetesCluster for this view. Extensions will not be loaded.");
         },
       },
     );
 
     setTimeout(() => {
-      emitEvent({
+      emitAppEvent({
         name: "cluster",
         action: "open",
         params: {
@@ -86,6 +80,4 @@ export const initClusterFrame = ({
 
       unmountRoot();
     };
-    // TODO: Make context dependency of KubeObjectStore
-    KubeObjectStore.defaultContext.set(clusterFrameContext);
   };

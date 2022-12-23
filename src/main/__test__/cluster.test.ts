@@ -2,11 +2,7 @@
  * Copyright (c) OpenLens Authors. All rights reserved.
  * Licensed under MIT License. See LICENSE in root directory for more information.
  */
-
-jest.mock("../../common/ipc");
-jest.mock("request");
-jest.mock("request-promise-native");
-
+import broadcastMessageInjectable from "../../common/ipc/broadcast-message.injectable";
 import { Console } from "console";
 import type { Cluster } from "../../common/cluster/cluster";
 import { Kubectl } from "../kubectl/kubectl";
@@ -14,6 +10,7 @@ import { getDiForUnitTesting } from "../getDiForUnitTesting";
 import type { CreateCluster } from "../../common/cluster/create-cluster-injection-token";
 import { createClusterInjectionToken } from "../../common/cluster/create-cluster-injection-token";
 import authorizationReviewInjectable from "../../common/cluster/authorization-review.injectable";
+import requestNamespaceListPermissionsForInjectable from "../../common/cluster/request-namespace-list-permissions.injectable";
 import listNamespacesInjectable from "../../common/cluster/list-namespaces.injectable";
 import createContextHandlerInjectable from "../context-handler/create-context-handler.injectable";
 import type { ClusterContextHandler } from "../context-handler/context-handler";
@@ -23,6 +20,10 @@ import directoryForTempInjectable from "../../common/app-paths/directory-for-tem
 import normalizedPlatformInjectable from "../../common/vars/normalized-platform.injectable";
 import kubectlBinaryNameInjectable from "../kubectl/binary-name.injectable";
 import kubectlDownloadingNormalizedArchInjectable from "../kubectl/normalized-arch.injectable";
+import pathExistsSyncInjectable from "../../common/fs/path-exists-sync.injectable";
+import pathExistsInjectable from "../../common/fs/path-exists.injectable";
+import readJsonSyncInjectable from "../../common/fs/read-json-sync.injectable";
+import writeJsonSyncInjectable from "../../common/fs/write-json-sync.injectable";
 
 console = new Console(process.stdout, process.stderr); // fix mockFS
 
@@ -41,7 +42,9 @@ describe("create clusters", () => {
     di.override(kubectlBinaryNameInjectable, () => "kubectl");
     di.override(kubectlDownloadingNormalizedArchInjectable, () => "amd64");
     di.override(normalizedPlatformInjectable, () => "darwin");
+    di.override(broadcastMessageInjectable, () => async () => {});
     di.override(authorizationReviewInjectable, () => () => () => Promise.resolve(true));
+    di.override(requestNamespaceListPermissionsForInjectable, () => () => async () => () => true);
     di.override(listNamespacesInjectable, () => () => () => Promise.resolve([ "default" ]));
     di.override(createContextHandlerInjectable, () => (cluster) => ({
       restartServer: jest.fn(),
@@ -54,6 +57,10 @@ describe("create clusters", () => {
       setupPrometheus: jest.fn(),
       ensureServer: jest.fn(),
     } as ClusterContextHandler));
+    di.override(pathExistsInjectable, () => () => { throw new Error("tried call pathExists without override"); });
+    di.override(pathExistsSyncInjectable, () => () => { throw new Error("tried call pathExistsSync without override"); });
+    di.override(readJsonSyncInjectable, () => () => { throw new Error("tried call readJsonSync without override"); });
+    di.override(writeJsonSyncInjectable, () => () => { throw new Error("tried call writeJsonSync without override"); });
 
     createCluster = di.inject(createClusterInjectionToken);
 

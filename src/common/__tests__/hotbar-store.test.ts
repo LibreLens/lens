@@ -8,7 +8,6 @@ import mockFs from "mock-fs";
 import type { CatalogEntity, CatalogEntityData, CatalogEntityKindData } from "../catalog";
 import { getDiForUnitTesting } from "../../main/getDiForUnitTesting";
 import getConfigurationFileModelInjectable from "../get-configuration-file-model/get-configuration-file-model.injectable";
-import appVersionInjectable from "../vars/app-version.injectable";
 import type { DiContainer } from "@ogre-tools/injectable";
 import hotbarStoreInjectable from "../hotbars/store.injectable";
 import type { HotbarStore } from "../hotbars/store";
@@ -19,6 +18,8 @@ import catalogCatalogEntityInjectable from "../catalog-entities/general-catalog-
 import loggerInjectable from "../logger.injectable";
 import type { Logger } from "../logger";
 import directoryForUserDataInjectable from "../app-paths/directory-for-user-data/directory-for-user-data.injectable";
+import storeMigrationVersionInjectable from "../vars/store-migration-version.injectable";
+import fsInjectable from "../fs/fs.injectable";
 
 function getMockCatalogEntity(data: Partial<CatalogEntityData> & CatalogEntityKindData): CatalogEntity {
   return {
@@ -46,7 +47,7 @@ describe("HotbarStore", () => {
   beforeEach(async () => {
     di = getDiForUnitTesting({ doGeneralOverrides: true });
 
-    (di as any).unoverride(hotbarStoreInjectable);
+    di.unoverride(hotbarStoreInjectable);
 
     testCluster = getMockCatalogEntity({
       apiVersion: "v1",
@@ -112,8 +113,9 @@ describe("HotbarStore", () => {
       catalogCatalogEntity,
     ]));
 
+    di.permitSideEffects(fsInjectable);
     di.permitSideEffects(getConfigurationFileModelInjectable);
-    di.permitSideEffects(hotbarStoreInjectable);
+    di.unoverride(getConfigurationFileModelInjectable);
   });
 
   afterEach(() => {
@@ -255,22 +257,12 @@ describe("HotbarStore", () => {
       });
 
       it("throws if invalid arguments provided", () => {
-        // Prevent writing to stderr during this render.
-        const { error, warn } = console;
-
-        console.error = jest.fn();
-        console.warn = jest.fn();
-
         hotbarStore.addToHotbar(testCluster);
 
         expect(() => hotbarStore.restackItems(-5, 0)).toThrow();
         expect(() => hotbarStore.restackItems(2, -1)).toThrow();
         expect(() => hotbarStore.restackItems(14, 1)).toThrow();
         expect(() => hotbarStore.restackItems(11, 112)).toThrow();
-
-        // Restore writing to stderr.
-        console.error = error;
-        console.warn = warn;
       });
 
       it("checks if entity already pinned to hotbar", () => {
@@ -284,7 +276,7 @@ describe("HotbarStore", () => {
 
   describe("given data from 5.0.0-beta.3 and version being 5.0.0-beta.10", () => {
     beforeEach(() => {
-      const configurationToBeMigrated = {
+      mockFs({
         "some-directory-for-user-data": {
           "lens-hotbar-store.json": JSON.stringify({
             __internal__: {
@@ -344,11 +336,9 @@ describe("HotbarStore", () => {
             ],
           }),
         },
-      };
+      });
 
-      mockFs(configurationToBeMigrated);
-
-      di.override(appVersionInjectable, () => "5.0.0-beta.10");
+      di.override(storeMigrationVersionInjectable, () => "5.0.0-beta.10");
 
       hotbarStore = di.inject(hotbarStoreInjectable);
 

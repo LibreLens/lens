@@ -8,16 +8,18 @@ import "./deployment-replicasets.scss";
 import React from "react";
 import { observer } from "mobx-react";
 import type { ReplicaSet } from "../../../common/k8s-api/endpoints";
-import type { KubeObjectMenuProps } from "../kube-object-menu";
 import { KubeObjectMenu } from "../kube-object-menu";
 import { Spinner } from "../spinner";
 import { prevDefault, stopPropagation } from "../../utils";
 import { DrawerTitle } from "../drawer";
 import { Table, TableCell, TableHead, TableRow } from "../table";
 import { KubeObjectStatusIcon } from "../kube-object-status-icon";
-import { replicaSetStore } from "../+workloads-replicasets/legacy-store";
-import { showDetails } from "../kube-detail-params";
 import { KubeObjectAge } from "../kube-object/age";
+import type { ReplicaSetStore } from "../+workloads-replicasets/store";
+import type { ShowDetails } from "../kube-detail-params/show-details.injectable";
+import { withInjectables } from "@ogre-tools/injectable-react";
+import showDetailsInjectable from "../kube-detail-params/show-details.injectable";
+import replicaSetStoreInjectable from "../+workloads-replicasets/store.injectable";
 
 
 enum sortBy {
@@ -27,18 +29,32 @@ enum sortBy {
   age = "age",
 }
 
+interface Dependencies {
+  replicaSetStore: ReplicaSetStore;
+  showDetails: ShowDetails;
+}
+
 export interface DeploymentReplicaSetsProps {
   replicaSets: ReplicaSet[];
 }
 
+interface Dependencies {
+  replicaSetStore: ReplicaSetStore;
+  showDetails: ShowDetails;
+}
+
 @observer
-export class DeploymentReplicaSets extends React.Component<DeploymentReplicaSetsProps> {
+class NonInjectedDeploymentReplicaSets extends React.Component<DeploymentReplicaSetsProps & Dependencies> {
   getPodsLength(replicaSet: ReplicaSet) {
-    return replicaSetStore.getChildPods(replicaSet).length;
+    return this.props.replicaSetStore.getChildPods(replicaSet).length;
   }
 
   render() {
-    const { replicaSets } = this.props;
+    const {
+      replicaSets,
+      replicaSetStore,
+      showDetails,
+    } = this.props;
 
     if (!replicaSets.length && !replicaSetStore.isLoaded) return (
       <div className="ReplicaSets"><Spinner center/></div>
@@ -84,7 +100,7 @@ export class DeploymentReplicaSets extends React.Component<DeploymentReplicaSets
                 <TableCell className="pods">{this.getPodsLength(replica)}</TableCell>
                 <TableCell className="age"><KubeObjectAge key="age" object={replica} /></TableCell>
                 <TableCell className="actions" onClick={stopPropagation}>
-                  <ReplicaSetMenu object={replica} />
+                  <KubeObjectMenu object={replica} />
                 </TableCell>
               </TableRow>
             ))
@@ -95,8 +111,10 @@ export class DeploymentReplicaSets extends React.Component<DeploymentReplicaSets
   }
 }
 
-export function ReplicaSetMenu(props: KubeObjectMenuProps<ReplicaSet>) {
-  return (
-    <KubeObjectMenu {...props}/>
-  );
-}
+export const DeploymentReplicaSets = withInjectables<Dependencies, DeploymentReplicaSetsProps>(NonInjectedDeploymentReplicaSets, {
+  getProps: (di, props) => ({
+    ...props,
+    replicaSetStore: di.inject(replicaSetStoreInjectable),
+    showDetails: di.inject(showDetailsInjectable),
+  }),
+});

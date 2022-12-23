@@ -5,11 +5,13 @@
 
 import type { KubeResource } from "../../common/rbac";
 import { apiResourceRecord } from "../../common/rbac";
+import { object } from "../../common/utils";
 
 export const ResourceNames: Record<KubeResource, string> = {
   "namespaces": "Namespaces",
   "nodes": "Nodes",
   "events": "Events",
+  "leases": "Leases",
   "resourcequotas": "Resource Quotas",
   "services": "Services",
   "secrets": "Secrets",
@@ -32,6 +34,7 @@ export const ResourceNames: Record<KubeResource, string> = {
   "podsecuritypolicies": "Pod Security Policies",
   "poddisruptionbudgets": "Pod Disruption Budgets",
   "priorityclasses": "Priority Classes",
+  "runtimeclasses": "Runtime Classes",
   "limitranges": "Limit Ranges",
   "roles": "Roles",
   "rolebindings": "Role Bindings",
@@ -40,7 +43,7 @@ export const ResourceNames: Record<KubeResource, string> = {
   "serviceaccounts": "Service Accounts",
 };
 
-export const ResourceKindMap: Record<string, KubeResource> = Object.fromEntries(
-  Object.entries(apiResourceRecord)
-    .map(([resource, { kind }]) => [kind, resource as KubeResource]),
+export const ResourceKindMap = object.fromEntries(
+  object.entries(apiResourceRecord)
+    .map(([resource, { kind }]) => [kind, resource]),
 );

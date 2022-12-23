@@ -13,9 +13,15 @@ import { Animate } from "../animate";
 import type { IconProps } from "../icon";
 import { Icon } from "../icon";
 import isEqual from "lodash/isEqual";
+import type { RequestAnimationFrame } from "../animate/request-animation-frame.injectable";
+import { withInjectables } from "@ogre-tools/injectable-react";
+import requestAnimationFrameInjectable from "../animate/request-animation-frame.injectable";
 
 export const MenuContext = React.createContext<MenuContextValue | null>(null);
-export type MenuContextValue = Menu;
+export interface MenuContextValue {
+  readonly props: Readonly<MenuProps>;
+  close: () => void;
+}
 
 export interface MenuPosition {
   left?: boolean;
@@ -44,6 +50,7 @@ export interface MenuProps {
   children?: ReactNode;
   animated?: boolean;
   toggleEvent?: "click" | "contextmenu";
+  "data-testid"?: string;
 }
 
 interface State {
@@ -62,17 +69,21 @@ const defaultPropsMenu: Partial<MenuProps> = {
   animated: true,
 };
 
-export class Menu extends React.Component<MenuProps, State> {
+interface Dependencies {
+  requestAnimationFrame: RequestAnimationFrame;
+}
+
+class NonInjectedMenu extends React.Component<MenuProps & Dependencies, State> {
   static defaultProps = defaultPropsMenu as object;
 
-  constructor(props: MenuProps) {
+  constructor(props: MenuProps & Dependencies) {
     super(props);
     autoBind(this);
   }
-  public opener: HTMLElement | null = null;
-  public elem: HTMLUListElement | null = null;
+  private opener: HTMLElement | null = null;
+  private elem: HTMLUListElement | null = null;
   protected items: { [index: number]: MenuItem } = {};
-  public state: State = {};
+  state: State = {};
 
   get isOpen() {
     return !!this.props.isOpen;
@@ -88,15 +99,15 @@ export class Menu extends React.Component<MenuProps, State> {
       htmlFor,
       toggleEvent,
     } = this.props;
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const elem = this.elem!;
 
     if (!usePortal) {
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      const parent = elem.parentElement!;
-      const position = window.getComputedStyle(parent).position;
+      if (this.elem?.parentElement) {
+        const { position } = window.getComputedStyle(this.elem.parentElement);
 
-      if (position === "static") parent.style.position = "relative";
+        if (position === "static") {
+          this.elem.parentElement.style.position = "relative";
+        }
+      }
     } else if (this.isOpen) {
       this.refreshPosition();
     }
@@ -126,6 +137,8 @@ export class Menu extends React.Component<MenuProps, State> {
     window.removeEventListener("resize", this.onWindowResize);
     window.removeEventListener("click", this.onClickOutside, true);
     window.removeEventListener("scroll", this.onScrollOutside, true);
+    window.removeEventListener("blur", this.onBlur, true);
+    window.removeEventListener("contextmenu", this.onContextMenu, true);
   }
 
   componentDidUpdate(prevProps: MenuProps) {
@@ -313,10 +326,8 @@ export class Menu extends React.Component<MenuProps, State> {
   }
 
   render() {
-    const { position, id, animated } = this.props;
-    let { className, usePortal } = this.props;
-
-    className = cssNames("Menu", className, this.state.position || position, {
+    const { position, id, animated, "data-testid": dataTestId, usePortal, className } = this.props;
+    const classNames = cssNames("Menu", className, this.state.position || position, {
       portal: usePortal,
     });
 
@@ -339,12 +350,13 @@ export class Menu extends React.Component<MenuProps, State> {
       <ul
         id={id}
         ref={this.bindRef}
-        className={className}
+        className={classNames}
         style={{
           left: this.state?.menuStyle?.left,
           top: this.state?.menuStyle?.top,
         }}
         onKeyDown={this.onKeyDown}
+        data-testid={dataTestId}
       >
         {menuItems}
       </ul>
@@ -364,13 +376,22 @@ export class Menu extends React.Component<MenuProps, State> {
       </MenuContext.Provider>
     );
 
-    if (usePortal === true) usePortal = document.body;
+    if (!usePortal) {
+      return menu;
+    }
 
-    return usePortal instanceof HTMLElement
-      ? createPortal(menu, usePortal)
-      : menu;
+    const portal = usePortal === true ? document.body : usePortal;
+
+    return createPortal(menu, portal);
   }
 }
+
+export const Menu = withInjectables<Dependencies, MenuProps>(NonInjectedMenu, {
+  getProps: (di, props) => ({
+    ...props,
+    requestAnimationFrame: di.inject(requestAnimationFrameInjectable),
+  }),
+});
 
 export function SubMenu(props: Partial<MenuProps>) {
   const { className, ...menuProps } = props;

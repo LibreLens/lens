@@ -13,9 +13,10 @@ const startCatalogSyncInjectable = getInjectable({
     const catalogSyncToRenderer = di.inject(catalogSyncToRendererInjectable);
 
     return {
-      run: async () => {
+      id: "start-catalog-sync",
+      run: () => {
         if (!catalogSyncToRenderer.started) {
-          await catalogSyncToRenderer.start();
+          catalogSyncToRenderer.start();
         }
       },
     };
